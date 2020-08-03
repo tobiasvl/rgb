@@ -34,7 +34,7 @@ impl Bus {
   }
 
   pub fn fetch_word(&self, address: u16) -> u16 {
-    return (self.fetch_byte(address) as u16) << 8 | self.fetch_byte(address + 1) as u16;
+    (self.fetch_byte(address) as u16) << 8 | self.fetch_byte(address + 1) as u16
   }
 }
 
@@ -50,7 +50,7 @@ pub struct MBC {
 impl MBC {
   fn read_byte(&self, address: u16) -> u8 {
     match self.kind {
-      MBCKind::NoMBC => return self.rom[address as usize]
+      MBCKind::NoMBC => self.rom[address as usize]
     }
   }
 }

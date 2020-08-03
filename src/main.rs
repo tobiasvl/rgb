@@ -45,9 +45,7 @@ fn main() {
   let bootrom = std::fs::read("boot.gb")
     .expect("Something went wrong");
 
-  for address in 0..256 {
-    cpu.bus.bootrom[address] = bootrom[address];
-  }
+  cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
 
   loop {
     print!("{:X}: ", cpu.registers.pc);

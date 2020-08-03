@@ -151,10 +151,10 @@ pub enum Operand {
 impl CPU {
   fn get_register_pair(&self, rp: RegisterPair) -> u16 {
     match rp {
-      RegisterPair::BC => &((self.registers.b as u16) << 8) | self.registers.c as u16,
-      RegisterPair::DE => &((self.registers.d as u16) << 8) | self.registers.e as u16,
-      RegisterPair::HL => &((self.registers.h as u16) << 8) | self.registers.l as u16,
-      RegisterPair::AF => &((self.registers.a as u16) << 8) | if self.flags.z { 0x8 } else { 0 } | if self.flags.n { 0x4 } else { 0 } | if self.flags.h { 0x2 } else { 0 } | if self.flags.c { 0x1 } else { 0 },
+      RegisterPair::BC => ((self.registers.b as u16) << 8) | self.registers.c as u16,
+      RegisterPair::DE => ((self.registers.d as u16) << 8) | self.registers.e as u16,
+      RegisterPair::HL => ((self.registers.h as u16) << 8) | self.registers.l as u16,
+      RegisterPair::AF => ((self.registers.a as u16) << 8) | if self.flags.z { 0x8 } else { 0 } | if self.flags.n { 0x4 } else { 0 } | if self.flags.h { 0x2 } else { 0 } | if self.flags.c { 0x1 } else { 0 },
       RegisterPair::SP => self.registers.sp,
       _ => panic!("Illegal register pair")
     }
@@ -182,13 +182,13 @@ impl CPU {
   fn fetch_imm8(&mut self) -> u8 {
     let value = self.bus.fetch_byte(self.registers.pc);
     self.registers.pc = self.registers.pc.wrapping_add(1);
-    return value;
+    value
   }
 
   fn fetch_imm16(&mut self) -> u16 {
     let value = self.bus.fetch_word(self.registers.pc);
     self.registers.pc = self.registers.pc.wrapping_add(2);
-    return value;
+    value
   }
 
   pub fn fetch(&mut self) -> u8 {
@@ -196,6 +196,7 @@ impl CPU {
   }
 
   pub fn decode(&mut self, opcode: u8) -> Instruction {
+    #[allow(clippy::match_overlapping_arm)]
     match opcode {
       0x00 => Instruction::NOP,
       0o20 => Instruction::STOP,
