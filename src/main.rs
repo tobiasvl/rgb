@@ -12,7 +12,10 @@ fn main() {
       bootrom_enabled: true,
       cartridge: MBC {
         kind: MBCKind::NoMBC,
-        rom: [0; 32768]
+        rom: [0; 32768],
+        ram: [0; 0x2000],
+        ram_enabled: false,
+        active_bank: 0
       },
       bootrom: [0; 256],
       wram: [0; 0x2000],
@@ -21,7 +24,8 @@ fn main() {
         vram: [0; 8192],
         oam: [0; 0xA0],
       },
-      ie: false
+      interrupt_enable: 0,
+      interrupt_flags: 0
     },
     registers: Registers {
       sp: 0,
@@ -39,7 +43,8 @@ fn main() {
       n: false,
       h: false,
       c: false
-    }
+    },
+    ime: false,
   };
 
   let bootrom = std::fs::read("boot.gb")
@@ -48,6 +53,7 @@ fn main() {
   cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
 
   loop {
+    // TODO check for interrupts
     print!("{:X}: ", cpu.registers.pc);
     let opcode = cpu.fetch();
     println!("{:X}", opcode);
