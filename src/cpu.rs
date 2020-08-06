@@ -60,6 +60,7 @@ impl IndexMut<&Register> for Registers {
     }
 }
 
+#[derive(Debug)]
 pub enum Register {
   A,
   B,
@@ -74,6 +75,7 @@ pub enum Register {
   IndirectC,
 }
 
+#[derive(Debug)]
 pub enum RegisterPair {
   BC,
   DE,
@@ -117,10 +119,12 @@ fn inherent_registerpair_operand(opcode: &u8) -> RegisterPair {
   }
 }
 
+#[derive(Debug)]
 pub enum Condition {
   Always, Zero, NonZero, Carry, NonCarry
 }
 
+#[derive(Debug)]
 pub enum Instruction {
   LD(Operand, Operand),
   XOR(Operand),
@@ -167,6 +171,7 @@ pub enum Instruction {
   CCF,
 }
 
+#[derive(Debug)]
 pub enum Operand {
   Immediate8(u8),
   IndirectImmediate8(u8),
@@ -178,7 +183,7 @@ pub enum Operand {
 }
 
 impl CPU {
-  fn get_register_pair(&self, rp: &RegisterPair) -> u16 {
+  pub fn get_register_pair(&self, rp: &RegisterPair) -> u16 {
     match rp {
       RegisterPair::BC => ((self.registers.b as u16) << 8) | self.registers.c as u16,
       RegisterPair::DE => ((self.registers.d as u16) << 8) | self.registers.e as u16,
@@ -229,6 +234,7 @@ impl CPU {
     self.bus.write_byte(self.registers.sp, (value >> 8) as u8);
     self.registers.sp = self.registers.sp.wrapping_sub(1);
     self.bus.write_byte(self.registers.sp, (value & 0xFF) as u8);
+    println!("pushed {:04X}", value);
   }
   
   fn pop(&mut self) -> u16 {
@@ -236,6 +242,7 @@ impl CPU {
     self.registers.sp = self.registers.sp.wrapping_add(1);
     result |= (self.bus.read_byte(self.registers.sp) as u16) << 8;
     self.registers.sp = self.registers.sp.wrapping_add(1);
+    println!("popped {:04X}", result);
     result
   }
 
@@ -243,7 +250,7 @@ impl CPU {
     #[allow(clippy::match_overlapping_arm)]
     match opcode {
       0o00 => Instruction::NOP,
-      0o01 | 0o21 | 0o41 | 0o61 => Instruction::LD(Operand::RegisterPair(inherent_registerpair_operand(&opcode)), Operand::Immediate16(self.fetch_imm16())),
+      0o01 | 0o21 | 0o41 | 0o61 => Instruction::LD(Operand::RegisterPair(inherent_registerpair_operand(&(opcode >> 3))), Operand::Immediate16(self.fetch_imm16())),
       0o07 => Instruction::RLCA,
       0o17 => Instruction::RRCA,
       0o27 => Instruction::RLA,
@@ -252,9 +259,9 @@ impl CPU {
       0o57 => Instruction::CPL,
       0o67 => Instruction::SCF,
       0o77 => Instruction::CCF,
-      0o11 | 0o31 | 0o51 | 0o71 => Instruction::ADD(Operand::RegisterPair(RegisterPair::HL), Operand::RegisterPair(inherent_registerpair_operand(&opcode))),
-      0o02 | 0o22 => Instruction::LD(Operand::RegisterIndirect(inherent_registerpair_operand(&(opcode & 0o07))), Operand::Register(Register::A)),
-      0o12 | 0o32 => Instruction::LD(Operand::Register(Register::A), Operand::RegisterIndirect(inherent_registerpair_operand(&(opcode & 0o07)))),
+      0o11 | 0o31 | 0o51 | 0o71 => Instruction::ADD(Operand::RegisterPair(RegisterPair::HL), Operand::RegisterPair(inherent_registerpair_operand(&(opcode >> 3)))),
+      0o02 | 0o22 => Instruction::LD(Operand::RegisterIndirect(inherent_registerpair_operand(&(opcode >> 3))), Operand::Register(Register::A)),
+      0o12 | 0o32 => Instruction::LD(Operand::Register(Register::A), Operand::RegisterIndirect(inherent_registerpair_operand(&(opcode >> 3)))),
       0o42 => Instruction::LD(Operand::Register(Register::IncrementHL), Operand::Register(Register::A)),
       0o52 => Instruction::LD(Operand::Register(Register::A), Operand::Register(Register::IncrementHL)),
       0o62 => Instruction::LD(Operand::Register(Register::DecrementHL), Operand::Register(Register::A)),
@@ -262,13 +269,13 @@ impl CPU {
       0o20 => Instruction::STOP,
       0o30 => Instruction::JR(Condition::Always, self.fetch_imm8() as i8),
       0o40 | 0o50 | 0o60 | 0o70 => Instruction::JR(inherent_condition_operand(&((opcode - 0o40) >> 3)), self.fetch_imm8() as i8),
-      0o03 | 0o23 | 0o43 | 0o63 => Instruction::INC(Operand::RegisterPair(inherent_registerpair_operand(&opcode))),
-      0o13 | 0o33 | 0o53 | 0o73 => Instruction::DEC(Operand::RegisterPair(inherent_registerpair_operand(&opcode))),
+      0o03 | 0o23 | 0o43 | 0o63 => Instruction::INC(Operand::RegisterPair(inherent_registerpair_operand(&(opcode >> 3)))),
+      0o13 | 0o33 | 0o53 | 0o73 => Instruction::DEC(Operand::RegisterPair(inherent_registerpair_operand(&(opcode >> 3)))),
       0o04 | 0o14 | 0o24 | 0o34 | 0o44 | 0o54 | 0o64 | 0o74 => Instruction::INC(Operand::Register(inherent_register_operand(&((opcode & 0o70) >> 3)))),
       0o05 | 0o15 | 0o25 | 0o35 | 0o45 | 0o55 | 0o65 | 0o75 => Instruction::DEC(Operand::Register(inherent_register_operand(&((opcode & 0o70) >> 3)))),
       0o06 | 0o16 | 0o26 | 0o36 | 0o46 | 0o56 | 0o66 | 0o76 => Instruction::LD(Operand::Register(inherent_register_operand(&((opcode & 0o70) >> 3))), Operand::Immediate8(self.fetch_imm8())),
       0o166 => Instruction::HALT,
-      0o100..=0o177 => Instruction::LD(Operand::Register(inherent_register_operand(&((opcode - 0o70) >> 3))), Operand::Register(inherent_register_operand(&opcode))),
+      0o100..=0o177 => Instruction::LD(Operand::Register(inherent_register_operand(&(opcode >> 3))), Operand::Register(inherent_register_operand(&opcode))),
       0o200..=0o207 => Instruction::ADD(Operand::Register(Register::A), Operand::Register(inherent_register_operand(&opcode))),
       0o210..=0o217 => Instruction::ADC(Operand::Register(inherent_register_operand(&opcode))),
       0o220..=0o227 => Instruction::SUB(Operand::Register(inherent_register_operand(&opcode))),
@@ -277,7 +284,7 @@ impl CPU {
       0o250..=0o257 => Instruction::XOR(Operand::Register(inherent_register_operand(&opcode))),
       0o260..=0o267 => Instruction::OR(Operand::Register(inherent_register_operand(&opcode))),
       0o270..=0o277 => Instruction::CP(Operand::Register(inherent_register_operand(&opcode))),
-      0o300 | 0o310 | 0o320 | 0o330 => Instruction::RET(inherent_condition_operand(&((opcode - 0o40) >> 3))),
+      0o300 | 0o310 | 0o320 | 0o330 => Instruction::RET(inherent_condition_operand(&(opcode >> 3))),
       0o301 | 0o321 | 0o341 => Instruction::POP(inherent_registerpair_operand(&((opcode & 0o70) >> 3))),
       0o305 | 0o325 | 0o345 => Instruction::PUSH(inherent_registerpair_operand(&((opcode & 0o70) >> 3))),
       0o361 => Instruction::POP(RegisterPair::AF),
@@ -285,8 +292,8 @@ impl CPU {
       0o311 => Instruction::RET(Condition::Always),
       0o303 => Instruction::JP(Condition::Always, Operand::Immediate16(self.fetch_imm16())),
       0o351 => Instruction::JP(Condition::Always, Operand::RegisterPair(RegisterPair::HL)),
-      0o302 | 0o312 | 0o322 | 0o332 => Instruction::JP(inherent_condition_operand(&((opcode - 0o300) >> 3)), Operand::Immediate16(self.fetch_imm16())),
-      0o304 | 0o314 | 0o324 | 0o334 => Instruction::CALL(inherent_condition_operand(&((opcode - 0o300) >> 3)), self.fetch_imm16()),
+      0o302 | 0o312 | 0o322 | 0o332 => Instruction::JP(inherent_condition_operand(&(opcode >> 3)), Operand::Immediate16(self.fetch_imm16())),
+      0o304 | 0o314 | 0o324 | 0o334 => Instruction::CALL(inherent_condition_operand(&(opcode >> 3)), self.fetch_imm16()),
       0o315 => Instruction::CALL(Condition::Always, self.fetch_imm16()),
       0o313 => {
         let opcode = self.fetch_imm8();
@@ -353,6 +360,35 @@ impl CPU {
           _ => panic!("Illegal operand")
         }
       },
+      Instruction::ADD(target, Operand::Register(source)) => {
+        match target {
+          Operand::Register(Register::A) => {
+            let result = match source {
+              Register::IndirectHL => self.registers.a.overflowing_add(self.bus.read_byte(self.get_register_pair(&RegisterPair::HL))),
+              _ => self.registers.a.overflowing_add(self.registers[&source])
+            };
+            self.flags.z = result.0 == 0;
+            self.flags.n = false;
+            self.flags.h = false;
+            self.flags.c = result.1;
+            self.registers.a = result.0;
+          },
+          _ => panic!("Illegal operand")
+        }
+      },
+      Instruction::SUB(source) => {
+        let value = match source {
+          Operand::Register(register) => self.registers[&register],
+          Operand::Immediate8(value) => value,
+          _ => panic!("Illegal operand")
+        };
+        let result = self.registers.a.overflowing_sub(value);
+        self.flags.z = result.0 == 0;
+        self.flags.n = true;
+        self.flags.h = false;
+        self.flags.c = result.1;
+        self.registers.a = result.0;
+      },
       Instruction::XOR(operand) => {
         self.registers.a ^= match operand {
           Operand::Register(register) => self.registers[&register],
@@ -394,6 +430,8 @@ impl CPU {
       },
       Instruction::BIT(bit, register) => {
         self.flags.z = self.registers[&register] & (1 << bit) == 0;
+        self.flags.n = false;
+        self.flags.h = true;
       },
       Instruction::PUSH(rp) => {
         self.push(self.get_register_pair(&rp));
@@ -467,14 +505,27 @@ impl CPU {
       },
       Instruction::DEC(operand) => {
         match operand {
-          Operand::Register(Register::IndirectHL) => {
-            self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)).wrapping_sub(1))
-          },
           Operand::RegisterPair(rp) => {
             self.set_register_pair(&rp, self.get_register_pair(&rp).wrapping_sub(1));
           },
           Operand::Register(register) => {
-            self.registers[&register] = self.registers[&register].wrapping_sub(1);
+            let (value, result) = match register {
+              Register::IndirectHL => {
+                let value = self.bus.read_byte(self.get_register_pair(&RegisterPair::HL));
+                let result = value.wrapping_sub(1);
+                self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), result);
+                (value, result)
+              },
+              _ => {
+                let value = self.registers[&register];
+                let result = value.wrapping_sub(1);
+                self.registers[&register] = result;
+                (value, result)
+              }
+            };
+            self.flags.z = result == 0;
+            self.flags.n = false;
+            self.flags.h = false;
           },
           _ => panic!("Illegal operand")
         }
@@ -516,18 +567,16 @@ impl CPU {
         self.flags.c = result.1;
       },
       Instruction::CP(operand) => {
-        match operand {
-          Operand::Immediate8(value) => {
-            self.flags.c = (self.registers.a.overflowing_sub(value)).1;
-          },
-          Operand::Register(Register::IndirectHL) => {
-            self.flags.c = (self.registers.a.overflowing_sub(self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)))).1;
-          },
-          Operand::Register(reg) => {
-            self.flags.c = (self.registers.a.overflowing_sub(self.registers[&reg])).1;
-          },
+        let result = self.registers.a.overflowing_sub(match operand {
+          Operand::Immediate8(value) => value,
+          Operand::Register(Register::IndirectHL) => self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
+          Operand::Register(reg) => self.registers[&reg],
           _ => panic!("Unhandled operand")
-        }
+        });
+        self.flags.z = result.0 == 0;
+        self.flags.n = true;
+        self.flags.h = false;
+        self.flags.c = result.1;
       },
       _ => panic!("Unhandled instruction")
     }

@@ -2,7 +2,7 @@ mod cpu;
 mod bus;
 mod ppu;
 
-use cpu::{CPU,Registers,Flags};
+use cpu::{CPU,Registers,Flags,RegisterPair};
 use bus::{Bus,MBC,MBCKind};
 use ppu::PPU;
 
@@ -23,6 +23,7 @@ fn main() {
       ppu: PPU {
         vram: [0; 8192],
         oam: [0; 0xA0],
+        scy: 0,
       },
       interrupt_enable: 0,
       interrupt_flags: 0
@@ -53,10 +54,24 @@ fn main() {
   cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
 
   loop {
+    println!("PC: {:04X}, AF: {:04X}, BC: {:04X}, DE: {:04X}, HL: {:04X}, SP: {:04X} ({:02X}{:02X}), ({:02X} {:02X} {:02X} {:02X})",
+      cpu.registers.pc,
+      cpu.get_register_pair(&RegisterPair::AF),
+      cpu.get_register_pair(&RegisterPair::BC),
+      cpu.get_register_pair(&RegisterPair::DE),
+      cpu.get_register_pair(&RegisterPair::HL),
+      cpu.get_register_pair(&RegisterPair::SP),
+      cpu.bus.read_byte(cpu.registers.sp),
+      cpu.bus.read_byte(cpu.registers.sp+1),
+      cpu.bus.read_byte(cpu.registers.pc),
+      cpu.bus.read_byte(cpu.registers.pc+1),
+      cpu.bus.read_byte(cpu.registers.pc+2),
+      cpu.bus.read_byte(cpu.registers.pc+3),
+    );
     // TODO check for interrupts
-    print!("{:X}: ", cpu.registers.pc);
+    //print!("{:X}: ", cpu.registers.pc);
     let opcode = cpu.fetch();
-    println!("{:X}", opcode);
+    //println!("{:X}", opcode);
     let instruction = cpu.decode(opcode);
     cpu.execute(instruction);
   }
