@@ -188,7 +188,7 @@ impl CPU {
       RegisterPair::BC => ((self.registers.b as u16) << 8) | self.registers.c as u16,
       RegisterPair::DE => ((self.registers.d as u16) << 8) | self.registers.e as u16,
       RegisterPair::HL => ((self.registers.h as u16) << 8) | self.registers.l as u16,
-      RegisterPair::AF => ((self.registers.a as u16) << 8) | if self.flags.z { 0x8 } else { 0 } | if self.flags.n { 0x4 } else { 0 } | if self.flags.h { 0x2 } else { 0 } | if self.flags.c { 0x1 } else { 0 },
+      RegisterPair::AF => ((self.registers.a as u16) << 8) | if self.flags.z { 0x80 } else { 0 } | if self.flags.n { 0x40 } else { 0 } | if self.flags.h { 0x20 } else { 0 } | if self.flags.c { 0x10 } else { 0 },
       RegisterPair::SP => self.registers.sp,
       _ => panic!("Illegal register pair")
     }
@@ -198,10 +198,10 @@ impl CPU {
     match rp {
       RegisterPair::AF => {
         self.registers.a = (value >> 8) as u8;
-        self.flags.z = value & 0x08 == 0x08;
-        self.flags.n = value & 0x04 == 0x04;
-        self.flags.h = value & 0x02 == 0x02;
-        self.flags.c = value & 0x01 == 0x01;
+        self.flags.z = value & 0x80 == 0x80;
+        self.flags.n = value & 0x40 == 0x40;
+        self.flags.h = value & 0x20 == 0x20;
+        self.flags.c = value & 0x10 == 0x10;
       },
       RegisterPair::BC => {
         self.registers.b = (value >> 8) as u8;
