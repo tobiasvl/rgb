@@ -359,8 +359,7 @@ impl CPU {
           },
           (Operand::Register(Register::IndirectC), Operand::Register(source)) => self.bus.write_byte(0xFF00 + self.registers[&Register::C] as u16, self.registers[&source]),
           (Operand::RegisterIndirect(rp), Operand::Register(source)) => self.bus.write_byte(self.get_register_pair(&rp), self.registers[&source]),
-          (Operand::Register(Register::IndirectHL), Operand::Register(source)) => self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), self.registers[&source]),
-          (Operand::Register(source), Operand::RegisterIndirect(rp)) => self.registers[&source] = self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
+          (Operand::Register(source), Operand::RegisterIndirect(rp)) => self.registers[&source] = self.bus.read_byte(self.get_register_pair(&rp)),
           (Operand::Register(source), Operand::Register(Register::IndirectHL)) => self.registers[&source] = self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
           (Operand::IndirectImmediate8(address), Operand::Register(source)) => self.bus.write_byte(0xFF00 + address as u16, self.registers[&source]),
           (Operand::Register(source), Operand::IndirectImmediate8(address)) => self.registers[&source] = self.bus.read_byte(0xFF00 + address as u16),
@@ -442,7 +441,7 @@ impl CPU {
       },
       Instruction::XOR(operand) => {
         self.registers.a ^= match operand {
-          Operand::Register(IndirectHL) => self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
+          Operand::Register(Register::IndirectHL) => self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
           Operand::Register(register) => self.registers[&register],
           Operand::Immediate8(value) => value,
           _ => panic!("Illegal operand")
@@ -454,7 +453,7 @@ impl CPU {
       },
       Instruction::AND(operand) => {
         self.registers.a &= match operand {
-          Operand::Register(IndirectHL) => self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
+          Operand::Register(Register::IndirectHL) => self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
           Operand::Register(register) => self.registers[&register],
           Operand::Immediate8(value) => value,
           _ => panic!("Illegal operand")
@@ -466,7 +465,7 @@ impl CPU {
       },
       Instruction::OR(operand) => {
         self.registers.a |= match operand {
-          Operand::Register(IndirectHL) => self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
+          Operand::Register(Register::IndirectHL) => self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
           Operand::Register(register) => self.registers[&register],
           Operand::Immediate8(value) => value,
           _ => panic!("Illegal operand")
