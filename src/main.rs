@@ -5,6 +5,7 @@ mod ppu;
 use cpu::{CPU,Registers,Flags,RegisterPair};
 use bus::{Bus,MBC,MBCKind};
 use ppu::PPU;
+use std::env;
 
 fn main() {
   let mut cpu = CPU {
@@ -74,15 +75,19 @@ fn main() {
     }
   };
 
-  let testrom = std::fs::read("gb-test-roms/cpu_instrs/individual/06-ld r,r.gb")
-    .expect("Something went wrong");
+  let testrom = std::fs::read("Blargg6.gb")
+  //let testrom = std::fs::read("gb-test-roms/cpu_instrs/individual/06-ld r,r.gb")
+    .expect("Couldn't load ROM");
 
   cpu.bus.cartridge.rom[..].clone_from_slice(&testrom[..]);
 
-  let mut num_instructions = 0;
+  let mut serial_output: String = String::from("");
+
+  let args: Vec<String> = env::args().collect();
+  let debug = args.len() > 1 && args[1] == "debug";
 
   loop {
-    //print!("PC: {:04X}, AF: {:04X}, BC: {:04X}, DE: {:04X}, HL: {:04X}, SP: {:04X} ({:02X}{:02X}), ({:02X} {:02X} {:02X} {:02X})",
+    //let s = format!("PC: {:04X}, AF: {:04X}, BC: {:04X}, DE: {:04X}, HL: {:04X}, SP: {:04X} ({:02X}{:02X}), ({:02X} {:02X} {:02X} {:02X})",
     //  cpu.registers.pc,
     //  cpu.get_register_pair(&RegisterPair::AF),
     //  cpu.get_register_pair(&RegisterPair::BC),
@@ -96,15 +101,44 @@ fn main() {
     //  cpu.bus.read_byte(cpu.registers.pc+2),
     //  cpu.bus.read_byte(cpu.registers.pc+3),
     //);
+    // gucci:
+    if debug {
+      println!("A: {:02X} F: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} H: {:02X} L: {:02X} SP: {:04X} PC: 00:{:04X} ({:02X} {:02X} {:02X} {:02X})",
+        cpu.registers.a,
+        cpu.get_register_pair(&RegisterPair::AF) & 0xFF,
+        cpu.registers.b,
+        cpu.registers.c,
+        cpu.registers.d,
+        cpu.registers.e,
+        cpu.registers.h,
+        cpu.registers.l,
+        cpu.get_register_pair(&RegisterPair::SP),
+        cpu.registers.pc,
+        cpu.bus.read_byte(cpu.registers.pc),
+        cpu.bus.read_byte(cpu.registers.pc+1),
+        cpu.bus.read_byte(cpu.registers.pc+2),
+        cpu.bus.read_byte(cpu.registers.pc+3),
+      );
+    }
     // TODO check for interrupts
     let opcode = cpu.fetch();
     let instruction = cpu.decode(opcode);
-    //println!(" - {:?}", instruction);
-    println!("{}", num_instructions);
+    //println!("{} - {:?}", s, instruction);
     cpu.execute(instruction);
-    if cpu.bus.read_byte(0xFF02) != 0 { print!("{}", cpu.bus.read_byte(0xFF01) as char); cpu.bus.write_byte(0xFF02, 0)}
-    num_instructions += 1;
-    if cpu.registers.pc == 0x100 { break };
+    if cpu.bus.read_byte(0xFF02) != 0 {
+      let character = cpu.bus.read_byte(0xFF01) as char;
+      if character == '\n' {
+        println!("{}", serial_output);
+        match &serial_output[..] {
+          "Passed" => std::process::exit(0),
+          "Failed" => std::process::exit(-1),
+          _ => serial_output = String::from("")
+        };
+      } else {
+        serial_output.push(character);
+      }
+      cpu.bus.write_byte(0xFF02, 0)
+    }
   }
 }
 

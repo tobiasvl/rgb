@@ -333,7 +333,7 @@ impl CPU {
       0o376 => Instruction::CP(Operand::Immediate8(self.fetch_imm8())),
       0o307 | 0o317 | 0o327 | 0o337 | 0o347 | 0o357 | 0o367 | 0o377 => Instruction::RST(((opcode & 0o70) >> 3) * 16),
       _ => {
-        panic!("Unhandled opcode 0x{:X}", opcode);
+        panic!("Unhandled opcode 0x{:02X} at {:04X}", opcode, self.registers.pc);
       }
     }
   }
@@ -392,7 +392,7 @@ impl CPU {
             if let Operand::RegisterPair(source) = source {
               let result = self.get_register_pair(&rp).overflowing_add(self.get_register_pair(&source));
               self.flags.n = false;
-              self.flags.h = false; // TODO
+              self.flags.h = (self.get_register_pair(&rp) & 0x0F) + (self.get_register_pair(&source) & 0x0F) > 0x0F; // TODO
               self.flags.c = result.1;
               self.set_register_pair(&rp, result.0);
             };
@@ -564,7 +564,7 @@ impl CPU {
             };
             self.flags.z = result == 0;
             self.flags.n = false;
-            self.flags.h = false; // TODO
+            self.flags.h = (value & 0x0F) + 1 > 0x0F; // TODO
           },
           _ => panic!("Illegal operand")
         }
@@ -591,7 +591,7 @@ impl CPU {
             };
             self.flags.z = result == 0;
             self.flags.n = true;
-            self.flags.h = false; // TODO
+            self.flags.h = (result & 0x0F) + 1 > 0x0F ; // TODO
           },
           _ => panic!("Illegal operand")
         }
