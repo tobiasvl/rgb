@@ -618,12 +618,12 @@ impl CPU {
         let result = match register {
           Register::IndirectHL => {
             let result = (self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)) >> 1, self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)) & 0x01 != 0);
-            self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), result.0 | if self.flags.c {1} else {0});
+            self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), result.0 | if self.flags.c {0x80} else {0});
             result
           },
           _ => {
             let result = (self.registers[&register] >> 1, self.registers[&register] & 0x01 != 0);
-            self.registers[&register] = result.0 | if self.flags.c {1} else {0};
+            self.registers[&register] = result.0 | if self.flags.c {0x80} else {0};
             result
           }
         };
@@ -642,7 +642,7 @@ impl CPU {
       },
       Instruction::RRA => {
         let result = (self.registers[&Register::A] >> 1, self.registers[&Register::A] & 0x01 != 0);
-        self.registers[&Register::A] = result.0 | if self.flags.c {1} else {0};
+        self.registers[&Register::A] = result.0 | if self.flags.c {0x80} else {0};
         self.flags.z = false;
         self.flags.n = false;
         self.flags.h = false;
@@ -658,7 +658,7 @@ impl CPU {
       },
       Instruction::RRCA => {
         let result = (self.registers[&Register::A] >> 1, self.registers[&Register::A] & 0x01 != 0);
-        self.registers[&Register::A] = result.0 | if result.1 {1} else {0};
+        self.registers[&Register::A] = result.0 | if result.1 {0x80} else {0};
         self.flags.z = false;
         self.flags.n = false;
         self.flags.h = false;
@@ -686,12 +686,12 @@ impl CPU {
         let result = match register {
           Register::IndirectHL => {
             let result = (self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)) >> 1, self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)) & 0x01 != 0);
-            self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), result.0 | if result.1 {1} else {0});
+            self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), result.0 | if result.1 {0x80} else {0});
             result
           },
           _ => {
             let result = (self.registers[&register] >> 1, self.registers[&register] & 0x01 != 0);
-            self.registers[&register] = result.0 | if result.1 {1} else {0};
+            self.registers[&register] = result.0 | if result.1 {0x80} else {0};
             result
           }
         };
@@ -709,7 +709,7 @@ impl CPU {
           },
           _ => {
             let result = (self.registers[&register] << 1, self.registers[&register] & 0x80 != 0);
-            self.registers[&register] = result.0 | ((result.0 >> 1) & 1);
+            self.registers[&register] = result.0 | ((result.0 << 1) & 1);
             result
           }
         };
@@ -727,7 +727,7 @@ impl CPU {
           },
           _ => {
             let result = (self.registers[&register] >> 1, self.registers[&register] & 0x01 != 0);
-            self.registers[&register] = result.0 | ((result.0 >> 1) & 1);
+            self.registers[&register] = result.0 | ((result.0 >> 1) & 0x80);
             result
           }
         };
