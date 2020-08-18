@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 winit = "0.22.2"
+clap = "2.33.3"

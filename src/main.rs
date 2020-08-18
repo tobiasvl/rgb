@@ -1,3 +1,6 @@
+extern crate clap;
+use clap::{Arg, App};
+
 mod cpu;
 mod bus;
 mod ppu;
@@ -5,9 +8,28 @@ mod ppu;
 use cpu::{CPU,Registers,Flags,RegisterPair};
 use bus::{Bus,MBC,MBCKind};
 use ppu::PPU;
-use std::env;
 
 fn main() {
+  let matches = App::new("RGB")
+    .version("1.0")
+    .author("Tobias V. Langhoff <tobias@langhoff.no>")
+    .about("Game Boy emulator")
+    .arg(Arg::with_name("ROM")
+          .help("ROM file")
+          .required(true) // for the time being
+          .index(1))
+    .arg(Arg::with_name("bootrom")
+          .short("b")
+          .long("bootrom")
+          .help("Boot ROM file")
+          .required(false))
+    .arg(Arg::with_name("debug")
+          .short("d")
+          .long("debug")
+          .takes_value(false)
+          .help("Debug log"))
+    .get_matches();
+
   let mut cpu = CPU {
     bus: Bus {
       bootrom_enabled: false,
@@ -51,40 +73,46 @@ fn main() {
     ime: false,
   };
 
-  let bootrom_load = std::fs::read("boot.gb");
-  match bootrom_load {
-    Ok(bootrom) => {
-      cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
-      cpu.bus.bootrom_enabled = true;
+  if !match matches.value_of("bootrom") {
+    Some(bootrom_file) => {
+      match std::fs::read(bootrom_file) {
+        Ok(bootrom) => {
+          cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
+          cpu.bus.bootrom_enabled = true;
+          true
+        },
+        Err(_) => {
+          println!("Can't open boot ROM file, skipping...");
+          false
+        }
+      }
     },
-    Err(_) => {
-      cpu.registers.pc = 0x100;
-      cpu.registers.a = 0x01;
-      cpu.registers.b = 0x00;
-      cpu.registers.c = 0x13;
-      cpu.registers.d = 0x00;
-      cpu.registers.e = 0xD8;
-      cpu.registers.h = 0x01;
-      cpu.registers.l = 0x4D;
-      cpu.flags.z = true;
-      cpu.flags.n = false;
-      cpu.flags.h = true;
-      cpu.flags.c = true;
-      cpu.registers.sp = 0xFFFE;
-
-    }
+    None => false
+  } {
+    cpu.registers.pc = 0x100;
+    cpu.registers.a = 0x01;
+    cpu.registers.b = 0x00;
+    cpu.registers.c = 0x13;
+    cpu.registers.d = 0x00;
+    cpu.registers.e = 0xD8;
+    cpu.registers.h = 0x01;
+    cpu.registers.l = 0x4D;
+    cpu.flags.z = true;
+    cpu.flags.n = false;
+    cpu.flags.h = true;
+    cpu.flags.c = true;
+    cpu.registers.sp = 0xFFFE;
   };
 
-  let testrom = std::fs::read("Blargg6.gb")
+  let rom = std::fs::read(matches.value_of("ROM").unwrap())
   //let testrom = std::fs::read("gb-test-roms/cpu_instrs/individual/06-ld r,r.gb")
     .expect("Couldn't load ROM");
 
-  cpu.bus.cartridge.rom[..].clone_from_slice(&testrom[..]);
+  cpu.bus.cartridge.rom[..].clone_from_slice(&rom[..]);
 
   let mut serial_output: String = String::from("");
 
-  let args: Vec<String> = env::args().collect();
-  let debug = args.len() > 1 && args[1] == "debug";
+  let debug = matches.is_present("debug"); // = args.len() > 1 && args[1] == "debug";
 
   loop {
     //let s = format!("PC: {:04X}, AF: {:04X}, BC: {:04X}, DE: {:04X}, HL: {:04X}, SP: {:04X} ({:02X}{:02X}), ({:02X} {:02X} {:02X} {:02X})",
