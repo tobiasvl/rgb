@@ -65,8 +65,9 @@ impl Bus {
     }
   }
 
-  pub fn write_word(&self, address: u16) -> u16 {
-    (self.read_byte(address + 1) as u16) << 8 | self.read_byte(address) as u16
+  pub fn write_word(&mut self, address: u16, value: u16) {
+    self.write_byte(address, value as u8);
+    self.write_byte(address.wrapping_add(1), (value >> 8) as u8);
   }
 }
 

@@ -40,7 +40,7 @@ impl Index<&Register> for Registers {
             Register::E => &self.e,
             Register::H => &self.h,
             Register::L => &self.l,
-            _ => panic!("Unknown register")
+            _ => panic!("Unknown register {:?}", index)
         }
     }
 }
@@ -55,7 +55,7 @@ impl IndexMut<&Register> for Registers {
             Register::E => &mut self.e,
             Register::H => &mut self.h,
             Register::L => &mut self.l,
-            _ => panic!("Unknown register")
+            _ => panic!("Unknown register {:?}", index)
         }
     }
 }
@@ -81,7 +81,6 @@ pub enum RegisterPair {
   DE,
   HL,
   SP,
-  PC,
   AF
 }
 
@@ -190,7 +189,6 @@ impl CPU {
       RegisterPair::HL => ((self.registers.h as u16) << 8) | self.registers.l as u16,
       RegisterPair::AF => ((self.registers.a as u16) << 8) | if self.flags.z { 0x80 } else { 0 } | if self.flags.n { 0x40 } else { 0 } | if self.flags.h { 0x20 } else { 0 } | if self.flags.c { 0x10 } else { 0 },
       RegisterPair::SP => self.registers.sp,
-      _ => panic!("Illegal register pair")
     }
   }
 
@@ -216,7 +214,6 @@ impl CPU {
         self.registers.l = value as u8;
       },
       RegisterPair::SP => self.registers.sp = value,
-      _ => panic!("Illegal register pair")
     }
   }
 
@@ -237,17 +234,13 @@ impl CPU {
   }
 
   fn push(&mut self, value: u16) {
-    self.registers.sp = self.registers.sp.wrapping_sub(1);
-    self.bus.write_byte(self.registers.sp, (value >> 8) as u8);
-    self.registers.sp = self.registers.sp.wrapping_sub(1);
-    self.bus.write_byte(self.registers.sp, (value & 0xFF) as u8);
+    self.registers.sp = self.registers.sp.wrapping_sub(2);
+    self.bus.write_word(self.registers.sp, value);
   }
   
   fn pop(&mut self) -> u16 {
-    let mut result = self.bus.read_byte(self.registers.sp) as u16;
-    self.registers.sp = self.registers.sp.wrapping_add(1);
-    result |= (self.bus.read_byte(self.registers.sp) as u16) << 8;
-    self.registers.sp = self.registers.sp.wrapping_add(1);
+    let result = self.bus.read_word(self.registers.sp);
+    self.registers.sp = self.registers.sp.wrapping_add(2);
     result
   }
 
@@ -265,6 +258,7 @@ impl CPU {
       0o67 => Instruction::SCF,
       0o77 => Instruction::CCF,
       0o11 | 0o31 | 0o51 | 0o71 => Instruction::ADD(Operand::RegisterPair(RegisterPair::HL), Operand::RegisterPair(inherent_registerpair_operand(&(opcode >> 3)))),
+      0o10 => Instruction::LD(Operand::IndirectImmediate16(self.fetch_imm16()), Operand::RegisterPair(RegisterPair::SP)),
       0o02 | 0o22 => Instruction::LD(Operand::RegisterIndirect(inherent_registerpair_operand(&(opcode >> 3))), Operand::Register(Register::A)),
       0o12 | 0o32 => Instruction::LD(Operand::Register(Register::A), Operand::RegisterIndirect(inherent_registerpair_operand(&(opcode >> 3)))),
       0o42 => Instruction::LD(Operand::Register(Register::IncrementHL), Operand::Register(Register::A)),
@@ -312,28 +306,33 @@ impl CPU {
           0o60..=0o67 => Instruction::SWAP(inherent_register_operand(&opcode)),
           0o70..=0o77 => Instruction::SRL(inherent_register_operand(&opcode)),
           0o100..=0o177 => Instruction::BIT((opcode - 0o100) >> 3, inherent_register_operand(&opcode)),
-          0o200..=0o277 => Instruction::RES((opcode - 0o100) >> 3, inherent_register_operand(&opcode)),
-          0o300..=0o377 => Instruction::SET((opcode - 0o100) >> 3, inherent_register_operand(&opcode)),
+          0o200..=0o277 => Instruction::RES((opcode - 0o200) >> 3, inherent_register_operand(&opcode)),
+          0o300..=0o377 => Instruction::SET((opcode - 0o300) >> 3, inherent_register_operand(&opcode)),
         }
       },
       0o306 => Instruction::ADD(Operand::Register(Register::A), Operand::Immediate8(self.fetch_imm8())),
       0o316 => Instruction::ADC(Operand::Immediate8(self.fetch_imm8())),
       0o326 => Instruction::SUB(Operand::Immediate8(self.fetch_imm8())),
+      0o331 => Instruction::RETI,
       0o336 => Instruction::SBC(Operand::Immediate8(self.fetch_imm8())),
       0o340 => Instruction::LD(Operand::IndirectImmediate8(self.fetch_imm8()), Operand::Register(Register::A)),
       0o342 => Instruction::LD(Operand::Register(Register::IndirectC), Operand::Register(Register::A)),
       0o346 => Instruction::AND(Operand::Immediate8(self.fetch_imm8())),
+      0o350 => Instruction::ADD(Operand::RegisterPair(RegisterPair::SP), Operand::Immediate8(self.fetch_imm8())),
       0o352 => Instruction::LD(Operand::IndirectImmediate16(self.fetch_imm16()), Operand::Register(Register::A)),
       0o356 => Instruction::XOR(Operand::Immediate8(self.fetch_imm8())),
       0o360 => Instruction::LD(Operand::Register(Register::A), Operand::IndirectImmediate8(self.fetch_imm8())),
+      0o362 => Instruction::LD(Operand::Register(Register::A), Operand::Register(Register::IndirectC)),
       0o363 => Instruction::DI,
       0o366 => Instruction::OR(Operand::Immediate8(self.fetch_imm8())),
+      0o370 => Instruction::LD(Operand::RegisterPair(RegisterPair::HL), Operand::Immediate16(self.get_register_pair(&RegisterPair::SP).wrapping_add(self.fetch_imm8() as i8 as u16))), // TODO this won't disassemble neatly
+      0o371 => Instruction::LD(Operand::RegisterPair(RegisterPair::SP), Operand::RegisterPair(RegisterPair::HL)),
       0o372 => Instruction::LD(Operand::Register(Register::A), Operand::IndirectImmediate16(self.fetch_imm16())),
       0o373 => Instruction::EI,
       0o376 => Instruction::CP(Operand::Immediate8(self.fetch_imm8())),
       0o307 | 0o317 | 0o327 | 0o337 | 0o347 | 0o357 | 0o367 | 0o377 => Instruction::RST(((opcode & 0o70) >> 3) * 16),
       _ => {
-        panic!("Unhandled opcode 0x{:02X} at {:04X}", opcode, self.registers.pc);
+        panic!("Unhandled opcode 0x{:02X} at 0x{:04X}", opcode, self.registers.pc);
       }
     }
   }
@@ -357,18 +356,21 @@ impl CPU {
             self.registers[&source] = self.bus.read_byte(self.get_register_pair(&RegisterPair::HL));
             self.set_register_pair(&RegisterPair::HL, self.get_register_pair(&RegisterPair::HL).wrapping_add(1));
           },
-          (Operand::Register(Register::IndirectC), Operand::Register(source)) => self.bus.write_byte(0xFF00 + self.registers[&Register::C] as u16, self.registers[&source]),
+          (Operand::Register(Register::IndirectC), Operand::Register(Register::A)) => self.bus.write_byte(0xFF00 + self.registers[&Register::C] as u16, self.registers.a),
+          (Operand::Register(Register::A), Operand::Register(Register::IndirectC)) => self.registers.a = self.bus.read_byte(0xFF00 + self.registers[&Register::C] as u16),
           (Operand::RegisterIndirect(rp), Operand::Register(source)) => self.bus.write_byte(self.get_register_pair(&rp), self.registers[&source]),
           (Operand::Register(source), Operand::RegisterIndirect(rp)) => self.registers[&source] = self.bus.read_byte(self.get_register_pair(&rp)),
           (Operand::Register(source), Operand::Register(Register::IndirectHL)) => self.registers[&source] = self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)),
           (Operand::IndirectImmediate8(address), Operand::Register(source)) => self.bus.write_byte(0xFF00 + address as u16, self.registers[&source]),
           (Operand::Register(source), Operand::IndirectImmediate8(address)) => self.registers[&source] = self.bus.read_byte(0xFF00 + address as u16),
           (Operand::IndirectImmediate16(address), Operand::Register(source)) => self.bus.write_byte(address, self.registers[&source]),
+          (Operand::IndirectImmediate16(address), Operand::RegisterPair(rp)) => self.bus.write_word(address, self.get_register_pair(&rp)),
           (Operand::Register(source), Operand::IndirectImmediate16(address)) => self.registers[&source] = self.bus.read_byte(address),
           (Operand::Register(target), Operand::Register(source)) => self.registers[&target] = self.registers[&source],
           (Operand::Register(target), Operand::Immediate8(value)) => self.registers[&target] = value,
           (Operand::RegisterPair(target), Operand::Immediate16(value)) => self.set_register_pair(&target, value),
-          _ => panic!("Illegal operand")
+          (Operand::RegisterPair(target), Operand::RegisterPair(source)) => self.set_register_pair(&target, self.get_register_pair(&source)),
+          _ => panic!("Illegal operand for LD")
         }
       },
       Instruction::ADD(target, source) => {
@@ -379,7 +381,7 @@ impl CPU {
               Operand::Immediate8(value) => self.registers.a.overflowing_add(value),
               _ => match source {
                 Operand::Register(reg) => self.registers.a.overflowing_add(self.registers[&reg]),
-                _ => panic!("Illegal operand")
+                _ => panic!("Illegal operand for ADD")
               }
             };
             self.flags.z = result.0 == 0;
@@ -389,15 +391,25 @@ impl CPU {
             self.registers.a = result.0;
           },
           Operand::RegisterPair(rp) => {
-            if let Operand::RegisterPair(source) = source {
-              let result = self.get_register_pair(&rp).overflowing_add(self.get_register_pair(&source));
-              self.flags.n = false;
-              self.flags.h = (self.get_register_pair(&rp) & 0x0F) + (self.get_register_pair(&source) & 0x0F) > 0x0F; // TODO
-              self.flags.c = result.1;
-              self.set_register_pair(&rp, result.0);
-            };
+            match source {
+              Operand::RegisterPair(source) => {
+                let result = self.get_register_pair(&rp).overflowing_add(self.get_register_pair(&source));
+                self.flags.n = false;
+                self.flags.h = (self.get_register_pair(&rp) & 0x0F) + (self.get_register_pair(&source) & 0x0F) > 0x0F; // TODO
+                self.flags.c = result.1;
+                self.set_register_pair(&rp, result.0);
+              },
+              Operand::Immediate8(value) => {
+                let result = self.get_register_pair(&rp).overflowing_add(value as u16);
+                self.flags.n = false;
+                self.flags.h = (self.get_register_pair(&rp) & 0x0F) + (value as u16 & 0x0F) > 0x0F; // TODO
+                self.flags.c = result.1;
+                self.set_register_pair(&rp, result.0)
+              },
+              _ => panic!("Illegal operand for ADD")
+            }
           },
-          _ => panic!("Illegal operand")
+          _ => panic!("Illegal operand for ADD")
         }
       },
       Instruction::ADC(source) => {
@@ -486,12 +498,28 @@ impl CPU {
         self.flags.n = false;
         self.flags.h = true;
       },
+      Instruction::SET(bit, register) => {
+        match register {
+          Register::IndirectHL => self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)) | 1 << bit),
+          _ => self.registers[&register] |= 1 << bit
+        }
+      },
+      Instruction::RES(bit, register) => {
+        match register {
+          Register::IndirectHL => self.bus.write_byte(self.get_register_pair(&RegisterPair::HL), self.bus.read_byte(self.get_register_pair(&RegisterPair::HL)) | 1 << bit),
+          _ => self.registers[&register] &= !(1 << bit)
+        }
+      },
       Instruction::PUSH(rp) => {
         self.push(self.get_register_pair(&rp));
       },
       Instruction::POP(rp) => {
         let result = self.pop();
         self.set_register_pair(&rp, result);
+      },
+      Instruction::RST(address) => {
+        self.push(self.registers.pc);
+        self.registers.pc = address as u16;
       },
       Instruction::CALL(condition, address) => {
         if match condition {
@@ -541,6 +569,10 @@ impl CPU {
         } {
           self.registers.pc = self.pop();
         }
+      },
+      Instruction::RETI => {
+        self.registers.pc = self.pop();
+        self.ime = true;
       },
       Instruction::INC(operand) => {
         match operand {
@@ -784,7 +816,12 @@ impl CPU {
         self.flags.h = false;
         self.flags.c = result.1;
       },
-      _ => panic!("Unhandled instruction")
+      Instruction::CPL => {
+        self.registers.a = !self.registers.a;
+        self.flags.n = true;
+        self.flags.h = true;
+      },
+      _ => panic!("Unhandled instruction {:?}", instruction)
     }
   }
 }
