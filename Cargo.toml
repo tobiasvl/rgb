@@ -1,8 +1,10 @@
 [package]
-name = "rgb"
+name = "rgb-emu"
 version = "0.1.0"
 authors = ["Tobias V. Langhoff"]
 edition = "2018"
+license = "MIT"
+description = "Rust Game Boy emulator"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
