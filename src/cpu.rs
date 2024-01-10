@@ -180,6 +180,7 @@ pub enum Operand {
     IndirectImmediate8(u8),
     Immediate16(u16),
     IndirectImmediate16(u16),
+    StackOffset(i8),
     Register(Register),
     RegisterPair(RegisterPair),
     RegisterIndirect(RegisterPair),
@@ -433,11 +434,8 @@ impl CPU {
             0o366 => Instruction::OR(Operand::Immediate8(self.fetch_imm8())),
             0o370 => Instruction::LD(
                 Operand::RegisterPair(RegisterPair::HL),
-                Operand::Immediate16(
-                    self.get_register_pair(&RegisterPair::SP)
-                        .wrapping_add(self.fetch_imm8() as i8 as u16),
-                ),
-            ), // TODO this won't disassemble neatly
+                Operand::StackOffset(self.fetch_imm8() as i8),
+            ),
             0o371 => Instruction::LD(
                 Operand::RegisterPair(RegisterPair::SP),
                 Operand::RegisterPair(RegisterPair::HL),
@@ -536,8 +534,12 @@ impl CPU {
                 (Operand::IndirectImmediate16(address), Operand::RegisterPair(rp)) => {
                     self.bus.write_word(address, self.get_register_pair(&rp))
                 }
-                (Operand::Register(source), Operand::IndirectImmediate16(address)) => {
-                    self.registers[&source] = self.bus.read_byte(address)
+                (Operand::Register(source), Operand::IndirectImmediate16(address)) => {}
+                (Operand::Register(target), Operand::Register(Register::DecrementHL)) => {
+                    let value = self.get_register_pair(&RegisterPair::HL);
+                    self.registers[&target] = self.bus.read_byte(value);
+                    let result = value.overflowing_sub(1);
+                    self.set_register_pair(&RegisterPair::HL, result.0);
                 }
                 (Operand::Register(target), Operand::Register(source)) => {
                     self.registers[&target] = self.registers[&source]
@@ -548,79 +550,94 @@ impl CPU {
                 (Operand::RegisterPair(target), Operand::Immediate16(value)) => {
                     self.set_register_pair(&target, value)
                 }
-                (Operand::RegisterPair(target), Operand::RegisterPair(source)) => {
-                    self.set_register_pair(&target, self.get_register_pair(&source))
+                (Operand::RegisterPair(target), Operand::RegisterPair(source)) => {}
+                (Operand::RegisterPair(_), Operand::StackOffset(value)) => {
+                    let result = self
+                        .get_register_pair(&RegisterPair::SP)
+                        .overflowing_add(value as u16);
+                    self.flags.z = false;
+                    self.flags.n = false;
+                    self.flags.h = (self.get_register_pair(&RegisterPair::SP) & 0x0F)
+                        + (value as u16 & 0x0F)
+                        > 0x0F;
+                    self.flags.c = (self.get_register_pair(&RegisterPair::SP) & 0xFF)
+                        + (value as u16 & 0xFF)
+                        > 0xFF;
+                    self.set_register_pair(&RegisterPair::HL, result.0);
                 }
                 _ => panic!("Illegal operand for LD"),
             },
-            Instruction::ADD(target, source) => {
-                match target {
-                    Operand::Register(Register::A) => {
-                        let value = match source {
-                            Operand::Register(Register::IndirectHL) => self
-                                .bus
-                                .read_byte(self.get_register_pair(&RegisterPair::HL)),
-                            Operand::Immediate8(value) => value,
-                            _ => match source {
-                                Operand::Register(reg) => self.registers[&reg],
-                                _ => panic!("Illegal operand for ADD"),
-                            },
-                        };
-                        let result = self.registers.a.overflowing_add(value);
-                        self.flags.z = result.0 == 0;
-                        self.flags.n = false;
-                        self.flags.h = (self.registers.a & 0x0F) + (value & 0x0F) > 0x0F;
-                        self.flags.c = result.1;
-                        self.registers.a = result.0;
-                    }
-                    Operand::RegisterPair(rp) => {
-                        match source {
-                            Operand::RegisterPair(source) => {
-                                let result = self
-                                    .get_register_pair(&rp)
-                                    .overflowing_add(self.get_register_pair(&source));
-                                self.flags.n = false;
-                                self.flags.h = (self.get_register_pair(&rp) & 0x0F)
-                                    + (self.get_register_pair(&source) & 0x0F)
-                                    > 0x0F; // TODO
-                                self.flags.c = result.1;
-                                self.set_register_pair(&rp, result.0);
-                            }
-                            Operand::Immediate8(value) => {
-                                let result = self
-                                    .get_register_pair(&rp)
-                                    .overflowing_add((value as i8) as u16);
-                                self.flags.n = false;
-                                self.flags.h = (self.get_register_pair(&rp) & 0x0F)
-                                    + (value as u16 & 0x0F)
-                                    > 0x0F; // TODO
-                                self.flags.c = result.1;
-                                self.set_register_pair(&rp, result.0)
-                            }
+            Instruction::ADD(target, source) => match target {
+                Operand::Register(Register::A) => {
+                    let value = match source {
+                        Operand::Register(Register::IndirectHL) => self
+                            .bus
+                            .read_byte(self.get_register_pair(&RegisterPair::HL)),
+                        Operand::Immediate8(value) => value,
+                        _ => match source {
+                            Operand::Register(reg) => self.registers[&reg],
                             _ => panic!("Illegal operand for ADD"),
-                        }
+                        },
+                    };
+                    let result = self.registers.a.overflowing_add(value);
+                    self.flags.z = result.0 == 0;
+                    self.flags.n = false;
+                    self.flags.h = (self.registers.a & 0x0F) + (value & 0x0F) > 0x0F;
+                    self.flags.c = result.1;
+                    self.registers.a = result.0;
+                }
+                Operand::RegisterPair(rp) => match source {
+                    Operand::RegisterPair(source) => {
+                        let result = self
+                            .get_register_pair(&rp)
+                            .overflowing_add(self.get_register_pair(&source));
+                        self.flags.n = false;
+                        self.flags.h = (self.get_register_pair(&rp) & 0x0FFF)
+                            + (self.get_register_pair(&source) & 0x0FFF)
+                            > 0x0FFF;
+                        self.flags.c = result.1;
+                        self.set_register_pair(&rp, result.0);
+                    }
+                    Operand::Immediate8(value) => {
+                        let result = self
+                            .get_register_pair(&rp)
+                            .overflowing_add((value as i8) as u16);
+                        self.flags.z = false;
+                        self.flags.n = false;
+                        self.flags.h =
+                            (self.get_register_pair(&rp) & 0x0F) + (value as u16 & 0x0F) > 0x0F;
+                        self.flags.c =
+                            (self.get_register_pair(&rp) & 0xFF) + (value as u16 & 0xFF) > 0xFF;
+                        self.set_register_pair(&rp, result.0);
                     }
                     _ => panic!("Illegal operand for ADD"),
-                }
-            }
+                },
+                _ => panic!("Illegal operand for ADD"),
+            },
             Instruction::ADC(source) => {
                 let value = match source {
+                    Operand::Register(Register::IndirectHL) => self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL)),
                     Operand::Register(reg) => self.registers[&reg],
                     Operand::Immediate8(value) => value,
                     _ => panic!("Illegal operand"),
                 };
-                let result = self
-                    .registers
-                    .a
-                    .overflowing_add(value + if self.flags.c { 1 } else { 0 });
+                let mut result = self.registers.a.overflowing_add(value);
+                let carry = result.1;
+                result = result.0.overflowing_add(u8::from(self.flags.c));
                 self.flags.z = result.0 == 0;
                 self.flags.n = false;
-                self.flags.h = (self.registers.a & 0x0F) + (value & 0x0F) + 1 > 0x0F;
-                self.flags.c = result.1;
+                self.flags.h =
+                    (self.registers.a & 0x0F) + (value & 0x0F) + u8::from(self.flags.c) > 0x0F;
+                self.flags.c = carry || result.1;
                 self.registers.a = result.0;
             }
             Instruction::SUB(source) => {
                 let value = match source {
+                    Operand::Register(Register::IndirectHL) => self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL)),
                     Operand::Register(register) => self.registers[&register],
                     Operand::Immediate8(value) => value,
                     _ => panic!("Illegal operand"),
@@ -628,24 +645,26 @@ impl CPU {
                 let result = self.registers.a.overflowing_sub(value);
                 self.flags.z = result.0 == 0;
                 self.flags.n = true;
-                self.flags.h = (self.registers.a & 0x0F).wrapping_add(!value & 0x0F) + 1 > 0x0F;
+                self.flags.h = (self.registers.a & 0x0F) < (value & 0x0F);
                 self.flags.c = result.1;
                 self.registers.a = result.0;
             }
             Instruction::SBC(source) => {
                 let value = match source {
+                    Operand::Register(Register::IndirectHL) => self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL)),
                     Operand::Register(register) => self.registers[&register],
                     Operand::Immediate8(value) => value,
                     _ => panic!("Illegal operand"),
                 };
-                let result = self
-                    .registers
-                    .a
-                    .overflowing_sub(value + if self.flags.c { 1 } else { 0 });
+                let mut result = self.registers.a.overflowing_sub(value);
+                let carry = result.1;
+                result = result.0.overflowing_sub(u8::from(self.flags.c));
                 self.flags.z = result.0 == 0;
                 self.flags.n = true;
-                self.flags.h = false;
-                self.flags.c = result.1;
+                self.flags.h = (self.registers.a & 0x0F) < (value & 0x0F) + u8::from(self.flags.c);
+                self.flags.c = carry || result.1;
                 self.registers.a = result.0;
             }
             Instruction::XOR(operand) => {
@@ -697,7 +716,13 @@ impl CPU {
                 self.ime = true; // TODO delay
             }
             Instruction::BIT(bit, register) => {
-                self.flags.z = self.registers[&register] & (1 << bit) == 0;
+                let value = match register {
+                    Register::IndirectHL => self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL)),
+                    _ => self.registers[&register],
+                } | 1 << bit;
+                self.flags.z = value == 0;
                 self.flags.n = false;
                 self.flags.h = true;
             }
@@ -868,11 +893,11 @@ impl CPU {
                             self.registers[&register] << 1,
                             self.registers[&register] & 0x80 != 0,
                         );
-                        self.registers[&register] = result.0 | if self.flags.c { 1 } else { 0 };
+                        self.registers[&register] = result.0 | u8::from(self.flags.c);
                         result
                     }
                 };
-                self.flags.z = result.0 == 0;
+                self.flags.z = result.0 | u8::from(self.flags.c) == 0;
                 self.flags.n = false;
                 self.flags.h = false;
                 self.flags.c = result.1;
@@ -904,7 +929,7 @@ impl CPU {
                         result
                     }
                 };
-                self.flags.z = result.0 == 0;
+                self.flags.z = result.0 | if self.flags.c { 0x80 } else { 0 } == 0;
                 self.flags.n = false;
                 self.flags.h = false;
                 self.flags.c = result.1;
@@ -967,16 +992,17 @@ impl CPU {
                         );
                         self.bus.write_byte(
                             self.get_register_pair(&RegisterPair::HL),
-                            result.0 | if result.1 { 1 } else { 0 },
+                            result.0 | u8::from(result.1),
                         );
                         result
                     }
                     _ => {
-                        let result = (
+                        let mut result: (u8, bool) = (
                             self.registers[&register] << 1,
                             self.registers[&register] & 0x80 != 0,
                         );
-                        self.registers[&register] = result.0 | if result.1 { 1 } else { 0 };
+                        result = (result.0 | u8::from(result.1), result.1);
+                        self.registers[&register] = result.0;
                         result
                     }
                 };
@@ -1004,11 +1030,12 @@ impl CPU {
                         result
                     }
                     _ => {
-                        let result = (
+                        let mut result = (
                             self.registers[&register] >> 1,
                             self.registers[&register] & 0x01 != 0,
                         );
-                        self.registers[&register] = result.0 | if result.1 { 0x80 } else { 0 };
+                        result = (result.0 | if result.1 { 0x80 } else { 0 }, result.1);
+                        self.registers[&register] = result.0;
                         result
                     }
                 };
@@ -1016,6 +1043,16 @@ impl CPU {
                 self.flags.n = false;
                 self.flags.h = false;
                 self.flags.c = result.1;
+            }
+            Instruction::SCF => {
+                self.flags.n = false;
+                self.flags.h = false;
+                self.flags.c = true;
+            }
+            Instruction::CCF => {
+                self.flags.n = false;
+                self.flags.h = false;
+                self.flags.c = !self.flags.c;
             }
             Instruction::SLA(register) => {
                 let result = match register {
@@ -1068,11 +1105,12 @@ impl CPU {
                         result
                     }
                     _ => {
-                        let result = (
+                        let mut result = (
                             self.registers[&register] >> 1,
                             self.registers[&register] & 0x01 != 0,
                         );
-                        self.registers[&register] = result.0 | ((result.0 >> 1) & 0x80);
+                        result = (result.0 | ((result.0 >> 1) & 0x80), result.1);
+                        self.registers[&register] = result.0;
                         result
                     }
                 };
@@ -1145,7 +1183,7 @@ impl CPU {
                 let result = self.registers.a.overflowing_sub(value);
                 self.flags.z = result.0 == 0;
                 self.flags.n = true;
-                self.flags.h = (self.registers.a & 0x0F).wrapping_add(!value & 0x0F) + 1 > 0x0F;
+                self.flags.h = (self.registers.a & 0x0F) < (value & 0x0F);
                 self.flags.c = result.1;
             }
             Instruction::CPL => {
