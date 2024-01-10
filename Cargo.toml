@@ -1,13 +1,13 @@
 [package]
 name = "rgb-emu"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Tobias V. Langhoff"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 description = "Rust Game Boy emulator"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/tobiasvl/rgb"
+categories = ["emulators"]
 
 [dependencies]
-winit = "0.22.2"
-clap = "2.33.3"
+#winit = "0.26"
+clap = "2"
