@@ -5,9 +5,9 @@ mod bus;
 mod cpu;
 mod ppu;
 
-use bus::{Bus, MBCKind, MBC};
-use cpu::{Flags, RegisterPair, Registers, CPU};
-use ppu::PPU;
+use bus::{Bus, MBCKind, Mbc};
+use cpu::{Cpu, Flags, RegisterPair, Registers};
+use ppu::Ppu;
 
 fn main() {
     let matches = App::new("RGB")
@@ -38,10 +38,10 @@ fn main() {
 
     let debug = matches.is_present("debug"); // = args.len() > 1 && args[1] == "debug";
 
-    let mut cpu = CPU {
+    let mut cpu = Cpu {
         bus: Bus {
             bootrom_enabled: false,
-            cartridge: MBC {
+            cartridge: Mbc {
                 kind: MBCKind::NoMBC,
                 rom: [0; 32768],
                 ram: [0; 0x2000],
@@ -51,7 +51,7 @@ fn main() {
             bootrom: [0; 256],
             wram: [0; 0x2000],
             hram: [0; 127],
-            ppu: PPU {
+            ppu: Ppu {
                 vram: [0; 8192],
                 oam: [0; 0xA0],
                 scy: 0,
@@ -110,29 +110,13 @@ fn main() {
         cpu.registers.sp = 0xFFFE;
     };
 
-    let rom = std::fs::read(matches.value_of("ROM").unwrap())
-        //let testrom = std::fs::read("gb-test-roms/cpu_instrs/individual/06-ld r,r.gb")
-        .expect("Couldn't load ROM");
+    let rom = std::fs::read(matches.value_of("ROM").unwrap()).expect("Couldn't load ROM");
 
     cpu.bus.cartridge.rom[..].clone_from_slice(&rom[..]);
 
     let mut serial_output: String = String::new();
 
     loop {
-        //let s = format!("PC: {:04X}, AF: {:04X}, BC: {:04X}, DE: {:04X}, HL: {:04X}, SP: {:04X} ({:02X}{:02X}), ({:02X} {:02X} {:02X} {:02X})",
-        //  cpu.registers.pc,
-        //  cpu.get_register_pair(&RegisterPair::AF),
-        //  cpu.get_register_pair(&RegisterPair::BC),
-        //  cpu.get_register_pair(&RegisterPair::DE),
-        //  cpu.get_register_pair(&RegisterPair::HL),
-        //  cpu.get_register_pair(&RegisterPair::SP),
-        //  cpu.bus.read_byte(cpu.registers.sp),
-        //  cpu.bus.read_byte(cpu.registers.sp+1),
-        //  cpu.bus.read_byte(cpu.registers.pc),
-        //  cpu.bus.read_byte(cpu.registers.pc+1),
-        //  cpu.bus.read_byte(cpu.registers.pc+2),
-        //  cpu.bus.read_byte(cpu.registers.pc+3),
-        //);
         // gucci:
         if debug {
             println!("A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
@@ -155,12 +139,11 @@ fn main() {
         // TODO check for interrupts
         let opcode = cpu.fetch();
         let instruction = cpu.decode(opcode);
-        //println!("{} - {:?}", s, instruction);
         cpu.execute(instruction);
         if cpu.bus.read_byte(0xFF02) != 0 {
             let character = cpu.bus.read_byte(0xFF01) as char;
             if character == '\n' {
-                eprintln!("{}", serial_output);
+                eprintln!("{serial_output}");
                 match &serial_output[..] {
                     "Passed" => std::process::exit(0),
                     "Failed" => std::process::exit(-1),
@@ -176,10 +159,10 @@ fn main() {
 
 #[test]
 fn test_initial_state_bootrom() {
-    let mut cpu = CPU {
+    let mut cpu = Cpu {
         bus: Bus {
             bootrom_enabled: false,
-            cartridge: MBC {
+            cartridge: Mbc {
                 kind: MBCKind::NoMBC,
                 rom: [0; 32768],
                 ram: [0; 0x2000],
@@ -189,7 +172,7 @@ fn test_initial_state_bootrom() {
             bootrom: [0; 256],
             wram: [0; 0x2000],
             hram: [0; 127],
-            ppu: PPU {
+            ppu: Ppu {
                 vram: [0; 8192],
                 oam: [0; 0xA0],
                 scy: 0,
@@ -258,19 +241,19 @@ fn test_initial_state_bootrom() {
     assert_eq!(cpu.registers.e, 0xD8);
     assert_eq!(cpu.registers.h, 0x01);
     assert_eq!(cpu.registers.l, 0x4D);
-    assert_eq!(cpu.flags.z, true);
-    assert_eq!(cpu.flags.n, false);
-    assert_eq!(cpu.flags.h, true);
-    assert_eq!(cpu.flags.c, true);
+    assert!(cpu.flags.z);
+    assert!(!cpu.flags.n);
+    assert!(cpu.flags.h);
+    assert!(cpu.flags.c);
     assert_eq!(cpu.registers.sp, 0xFFFE);
 }
 
 #[test]
 fn test_initial_state_bootrom_no_cart() {
-    let mut cpu = CPU {
+    let mut cpu = Cpu {
         bus: Bus {
             bootrom_enabled: false,
-            cartridge: MBC {
+            cartridge: Mbc {
                 kind: MBCKind::NoMBC,
                 rom: [0xFF; 32768],
                 ram: [0; 0x2000],
@@ -280,7 +263,7 @@ fn test_initial_state_bootrom_no_cart() {
             bootrom: [0; 256],
             wram: [0; 0x2000],
             hram: [0; 127],
-            ppu: PPU {
+            ppu: Ppu {
                 vram: [0; 8192],
                 oam: [0; 0xA0],
                 scy: 0,
@@ -331,9 +314,9 @@ fn test_initial_state_bootrom_no_cart() {
     assert_eq!(cpu.registers.e, 0xD8);
     assert_eq!(cpu.registers.h, 0x01);
     assert_eq!(cpu.registers.l, 0x4D);
-    assert_eq!(cpu.flags.z, false);
-    assert_eq!(cpu.flags.n, false);
-    assert_eq!(cpu.flags.h, false); // TODO check this
-    assert_eq!(cpu.flags.c, false);
+    assert!(!cpu.flags.z);
+    assert!(!cpu.flags.n);
+    assert!(!cpu.flags.h); // TODO check this
+    assert!(!cpu.flags.c);
     assert_eq!(cpu.registers.sp, 0xFFFE);
 }

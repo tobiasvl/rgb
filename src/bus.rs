@@ -1,9 +1,9 @@
-use crate::PPU;
+use crate::Ppu;
 
 pub struct Bus {
     pub bootrom: [u8; 256],
-    pub cartridge: MBC,
-    pub ppu: PPU,
+    pub cartridge: Mbc,
+    pub ppu: Ppu,
     pub wram: [u8; 0x2000], // TODO banks
     pub hram: [u8; 127],
     pub bootrom_enabled: bool,
@@ -43,14 +43,14 @@ impl Bus {
     }
 
     pub fn read_word(&self, address: u16) -> u16 {
-        (self.read_byte(address + 1) as u16) << 8 | self.read_byte(address) as u16
+        u16::from(self.read_byte(address + 1)) << 8 | u16::from(self.read_byte(address))
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
         match address {
             0x0000..=0x00FF => {
                 if !self.bootrom_enabled {
-                    self.cartridge.write_byte(address, value)
+                    self.cartridge.write_byte(address, value);
                 }
             }
             0x0100..=0x3FFF => self.cartridge.write_byte(address, value),
@@ -65,7 +65,7 @@ impl Bus {
             0xFF42 => self.ppu.scy = value,
             0xFF50 => {
                 if value > 0 {
-                    self.bootrom_enabled = false
+                    self.bootrom_enabled = false;
                 }
             }
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
@@ -75,7 +75,7 @@ impl Bus {
     }
 
     pub fn write_word(&mut self, address: u16, value: u16) {
-        self.write_byte(address, value as u8);
+        self.write_byte(address, (value & 0xFF) as u8);
         self.write_byte(address.wrapping_add(1), (value >> 8) as u8);
     }
 }
@@ -85,7 +85,7 @@ pub enum MBCKind {
     MBC1,
 }
 
-pub struct MBC {
+pub struct Mbc {
     pub kind: MBCKind,
     pub rom: [u8; 0x8000],
     pub ram: [u8; 0x2000],
@@ -93,13 +93,13 @@ pub struct MBC {
     pub ram_enabled: bool,
 }
 
-impl MBC {
+impl Mbc {
     fn read_byte(&self, address: u16) -> u8 {
         match self.kind {
             MBCKind::NoMBC => self.rom[address as usize],
             MBCKind::MBC1 => match address {
                 0x0000..=0x3FFF => self.rom[address as usize],
-                0x4000..=0x7FFF => self.rom[(address * self.active_bank as u16) as usize],
+                0x4000..=0x7FFF => self.rom[(address * u16::from(self.active_bank)) as usize],
                 0xA000..=0xBFFF => {
                     if self.ram_enabled {
                         self.ram[(address - 0xA000) as usize]
