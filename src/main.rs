@@ -36,6 +36,8 @@ fn main() {
         )
         .get_matches();
 
+    let debug = matches.is_present("debug"); // = args.len() > 1 && args[1] == "debug";
+
     let mut cpu = CPU {
         bus: Bus {
             bootrom_enabled: false,
@@ -114,9 +116,7 @@ fn main() {
 
     cpu.bus.cartridge.rom[..].clone_from_slice(&rom[..]);
 
-    let mut serial_output: String = String::from("");
-
-    let debug = matches.is_present("debug"); // = args.len() > 1 && args[1] == "debug";
+    let mut serial_output: String = String::new();
 
     loop {
         //let s = format!("PC: {:04X}, AF: {:04X}, BC: {:04X}, DE: {:04X}, HL: {:04X}, SP: {:04X} ({:02X}{:02X}), ({:02X} {:02X} {:02X} {:02X})",
@@ -135,22 +135,22 @@ fn main() {
         //);
         // gucci:
         if debug {
-            println!("A: {:02X} F: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} H: {:02X} L: {:02X} SP: {:04X} PC: 00:{:04X} ({:02X} {:02X} {:02X} {:02X})",
-        cpu.registers.a,
-        cpu.get_register_pair(&RegisterPair::AF) & 0xFF,
-        cpu.registers.b,
-        cpu.registers.c,
-        cpu.registers.d,
-        cpu.registers.e,
-        cpu.registers.h,
-        cpu.registers.l,
-        cpu.get_register_pair(&RegisterPair::SP),
-        cpu.registers.pc,
-        cpu.bus.read_byte(cpu.registers.pc),
-        cpu.bus.read_byte(cpu.registers.pc+1),
-        cpu.bus.read_byte(cpu.registers.pc+2),
-        cpu.bus.read_byte(cpu.registers.pc+3),
-      );
+            println!("A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
+                cpu.registers.a,
+                cpu.get_register_pair(&RegisterPair::AF) & 0xFF,
+                cpu.registers.b,
+                cpu.registers.c,
+                cpu.registers.d,
+                cpu.registers.e,
+                cpu.registers.h,
+                cpu.registers.l,
+                cpu.get_register_pair(&RegisterPair::SP),
+                cpu.registers.pc,
+                cpu.bus.read_byte(cpu.registers.pc),
+                cpu.bus.read_byte(cpu.registers.pc+1),
+                cpu.bus.read_byte(cpu.registers.pc+2),
+                cpu.bus.read_byte(cpu.registers.pc+3),
+            );
         }
         // TODO check for interrupts
         let opcode = cpu.fetch();
@@ -160,16 +160,16 @@ fn main() {
         if cpu.bus.read_byte(0xFF02) != 0 {
             let character = cpu.bus.read_byte(0xFF01) as char;
             if character == '\n' {
-                println!("{}", serial_output);
+                eprintln!("{}", serial_output);
                 match &serial_output[..] {
                     "Passed" => std::process::exit(0),
                     "Failed" => std::process::exit(-1),
-                    _ => serial_output = String::from(""),
+                    _ => serial_output = String::new(),
                 };
             } else {
                 serial_output.push(character);
             }
-            cpu.bus.write_byte(0xFF02, 0)
+            cpu.bus.write_byte(0xFF02, 0);
         }
     }
 }
