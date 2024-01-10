@@ -9,5 +9,5 @@ repository = "https://github.com/tobiasvl/rgb"
 categories = ["emulators"]
 
 [dependencies]
-#winit = "0.26"
-clap = "2"
+#winit = "0.29"
+clap = { version = "4.4", features = ["derive"] }
