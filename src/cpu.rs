@@ -1,13 +1,22 @@
 use crate::bus::Bus;
 use std::ops::{Index, IndexMut};
 
+#[derive(Default)]
 pub struct Cpu {
-    pub bus: Bus,
     pub registers: Registers,
     pub flags: Flags,
     pub ime: bool,
+    pub bus: Bus,
 }
 
+impl Cpu {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Default)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Flags {
     pub z: bool,
@@ -16,6 +25,7 @@ pub struct Flags {
     pub h: bool,
 }
 
+#[derive(Default)]
 pub struct Registers {
     pub a: u8,
     pub b: u8,
@@ -187,6 +197,7 @@ pub enum Operand {
 }
 
 impl Cpu {
+    #[must_use]
     pub fn get_register_pair(&self, rp: &RegisterPair) -> u16 {
         match rp {
             RegisterPair::BC => (u16::from(self.registers.b) << 8) | u16::from(self.registers.c),

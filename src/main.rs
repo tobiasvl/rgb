@@ -2,12 +2,11 @@ use clap::Parser;
 use std::path::PathBuf;
 
 mod bus;
+mod cartridge;
 mod cpu;
 mod ppu;
 
-use bus::{Bus, MBCKind, Mbc};
-use cpu::{Cpu, Flags, RegisterPair, Registers};
-use ppu::Ppu;
+use cpu::{Cpu, RegisterPair};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -28,48 +27,7 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
-    let mut cpu = Cpu {
-        bus: Bus {
-            bootrom_enabled: false,
-            cartridge: Mbc {
-                kind: MBCKind::NoMBC,
-                rom: [0; 0x8000],
-                ram: [0; 0x2000],
-                ram_enabled: false,
-                active_bank: 0,
-            },
-            bootrom: [0; 256],
-            wram: [0; 0x2000],
-            hram: [0; 127],
-            ppu: Ppu {
-                vram: [0; 8192],
-                oam: [0; 0xA0],
-                scy: 0,
-            },
-            interrupt_enable: 0,
-            interrupt_flags: 0,
-            serial: 0,
-            serial_control: 0,
-        },
-        registers: Registers {
-            sp: 0,
-            pc: 0,
-            a: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            h: 0,
-            l: 0,
-        },
-        flags: Flags {
-            z: false,
-            n: false,
-            h: false,
-            c: false,
-        },
-        ime: false,
-    };
+    let mut cpu = Cpu::new();
 
     if !match cli.bootrom {
         Some(bootrom_file) => match std::fs::read(bootrom_file) {
@@ -101,8 +59,7 @@ fn main() {
     };
 
     let rom = std::fs::read(cli.rom).expect("Unable to open ROM");
-
-    cpu.bus.cartridge.rom[..].clone_from_slice(&rom[..]);
+    cpu.bus.cartridge = Some(cartridge::from_rom(rom));
 
     loop {
         // gucci:

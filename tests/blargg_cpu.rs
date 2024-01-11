@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used)]
-use rgb_emu::bus::*;
+use rgb_emu::cartridge;
 use rgb_emu::cpu::*;
-use rgb_emu::ppu::*;
 
 #[test]
 fn blargg_cpu_all() -> Result<(), String> {
@@ -64,48 +63,7 @@ fn blargg_cpu_11() -> Result<(), String> {
 }
 
 fn run_blargg_cpu_test(path: &str) -> Result<(), String> {
-    let mut cpu = Cpu {
-        bus: Bus {
-            bootrom_enabled: false,
-            cartridge: Mbc {
-                kind: MBCKind::NoMBC,
-                rom: [0; 0x8000],
-                ram: [0; 0x2000],
-                ram_enabled: false,
-                active_bank: 0,
-            },
-            bootrom: [0; 256],
-            wram: [0; 0x2000],
-            hram: [0; 127],
-            ppu: Ppu {
-                vram: [0; 8192],
-                oam: [0; 0xA0],
-                scy: 0,
-            },
-            interrupt_enable: 0,
-            interrupt_flags: 0,
-            serial: 0,
-            serial_control: 0,
-        },
-        registers: Registers {
-            sp: 0,
-            pc: 0,
-            a: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            h: 0,
-            l: 0,
-        },
-        flags: Flags {
-            z: false,
-            n: false,
-            h: false,
-            c: false,
-        },
-        ime: false,
-    };
+    let mut cpu = Cpu::new();
 
     cpu.registers.pc = 0x100;
     cpu.registers.a = 0x01;
@@ -124,7 +82,7 @@ fn run_blargg_cpu_test(path: &str) -> Result<(), String> {
     let rom = std::fs::read(String::from("tests/gb-test-roms/cpu_instrs/") + path)
         .expect("Unable to open ROM");
 
-    cpu.bus.cartridge.rom[..].clone_from_slice(&rom[..]);
+    cpu.bus.cartridge = Some(cartridge::from_rom(rom));
 
     let mut serial_output: String = String::new();
 

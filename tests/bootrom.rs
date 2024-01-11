@@ -1,51 +1,9 @@
-use rgb_emu::bus::*;
+use rgb_emu::cartridge;
 use rgb_emu::cpu::*;
-use rgb_emu::ppu::*;
 
 #[test]
 fn test_initial_state_bootrom() {
-    let mut cpu = Cpu {
-        bus: Bus {
-            bootrom_enabled: false,
-            cartridge: Mbc {
-                kind: MBCKind::NoMBC,
-                rom: [0; 32768],
-                ram: [0; 0x2000],
-                ram_enabled: false,
-                active_bank: 0,
-            },
-            bootrom: [0; 256],
-            wram: [0; 0x2000],
-            hram: [0; 127],
-            ppu: Ppu {
-                vram: [0; 8192],
-                oam: [0; 0xA0],
-                scy: 0,
-            },
-            interrupt_enable: 0,
-            interrupt_flags: 0,
-            serial: 0,
-            serial_control: 0,
-        },
-        registers: Registers {
-            sp: 0,
-            pc: 0,
-            a: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            h: 0,
-            l: 0,
-        },
-        flags: Flags {
-            z: false,
-            n: false,
-            h: false,
-            c: false,
-        },
-        ime: false,
-    };
+    let mut cpu = Cpu::new();
 
     let bootrom = std::fs::read("boot.gb").expect("Test requires bootrom");
     cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
@@ -53,7 +11,7 @@ fn test_initial_state_bootrom() {
 
     let testrom = std::fs::read("gb-test-roms/cpu_instrs/individual/06-ld r,r.gb")
         .expect("Test requires cartridge");
-    cpu.bus.cartridge.rom[..].clone_from_slice(&testrom[..]);
+    cpu.bus.cartridge = Some(cartridge::from_rom(testrom));
 
     loop {
         println!("PC: {:04X}, AF: {:04X}, BC: {:04X}, DE: {:04X}, HL: {:04X}, SP: {:04X} ({:02X}{:02X}), ({:02X} {:02X} {:02X} {:02X})",
@@ -95,48 +53,7 @@ fn test_initial_state_bootrom() {
 
 #[test]
 fn test_initial_state_bootrom_no_cart() {
-    let mut cpu = Cpu {
-        bus: Bus {
-            bootrom_enabled: false,
-            cartridge: Mbc {
-                kind: MBCKind::NoMBC,
-                rom: [0xFF; 32768],
-                ram: [0; 0x2000],
-                ram_enabled: false,
-                active_bank: 0,
-            },
-            bootrom: [0; 256],
-            wram: [0; 0x2000],
-            hram: [0; 127],
-            ppu: Ppu {
-                vram: [0; 8192],
-                oam: [0; 0xA0],
-                scy: 0,
-            },
-            interrupt_enable: 0,
-            interrupt_flags: 0,
-            serial: 0,
-            serial_control: 0,
-        },
-        registers: Registers {
-            sp: 0,
-            pc: 0,
-            a: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            h: 0,
-            l: 0,
-        },
-        flags: Flags {
-            z: false,
-            n: false,
-            h: false,
-            c: false,
-        },
-        ime: false,
-    };
+    let mut cpu = Cpu::new();
 
     let bootrom = std::fs::read("boot.gb").expect("Test requires bootrom");
     cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
