@@ -728,7 +728,7 @@ impl Cpu {
                         .bus
                         .read_byte(self.get_register_pair(&RegisterPair::HL)),
                     _ => self.registers[&register],
-                } | 1 << bit;
+                } & (1 << bit);
                 self.flags.z = value == 0;
                 self.flags.n = false;
                 self.flags.h = true;
@@ -738,7 +738,7 @@ impl Cpu {
                     self.get_register_pair(&RegisterPair::HL),
                     self.bus
                         .read_byte(self.get_register_pair(&RegisterPair::HL))
-                        | 1 << bit,
+                        | (1 << bit),
                 ),
                 _ => self.registers[&register] |= 1 << bit,
             },
@@ -747,7 +747,7 @@ impl Cpu {
                     self.get_register_pair(&RegisterPair::HL),
                     self.bus
                         .read_byte(self.get_register_pair(&RegisterPair::HL))
-                        | 1 << bit,
+                        & !(1 << bit),
                 ),
                 _ => self.registers[&register] &= !(1 << bit),
             },
@@ -1093,7 +1093,7 @@ impl Cpu {
                         self.registers[&register] >> 1,
                         self.registers[&register] & 0x01 != 0,
                     );
-                    result = (result.0 | ((result.0 >> 1) & 0x80), result.1);
+                    result = (result.0 | ((self.registers[&register]) & 0x80), result.1);
                     self.registers[&register] = result.0;
                     result
                 };
