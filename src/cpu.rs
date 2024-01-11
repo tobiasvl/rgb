@@ -1,4 +1,5 @@
-use crate::Bus;
+use crate::bus::Bus;
+use std::ops::{Index, IndexMut};
 
 pub struct Cpu {
     pub bus: Bus,
@@ -26,8 +27,6 @@ pub struct Registers {
     pub pc: u16,
     pub sp: u16,
 }
-
-use std::ops::{Index, IndexMut};
 
 impl Index<&Register> for Registers {
     type Output = u8;

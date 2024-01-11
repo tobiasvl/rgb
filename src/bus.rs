@@ -1,4 +1,4 @@
-use crate::Ppu;
+use crate::ppu::Ppu;
 
 pub struct Bus {
     pub bootrom: [u8; 256],
