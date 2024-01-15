@@ -1,3 +1,5 @@
+use crate::interrupts::Interrupt;
+
 pub struct Ppu {
     pub vram: [u8; 0x2000],
     pub oam: [u8; 0xA0],
@@ -11,5 +13,11 @@ impl Default for Ppu {
             oam: [0; 0xA0],
             scy: 0,
         }
+    }
+}
+
+impl Ppu {
+    pub(crate) fn tick(&mut self) -> Option<Interrupt> {
+        None
     }
 }

@@ -4,7 +4,9 @@ use std::path::PathBuf;
 mod bus;
 mod cartridge;
 mod cpu;
+mod interrupts;
 mod ppu;
+mod timer;
 
 use cpu::{Cpu, RegisterPair};
 
@@ -43,19 +45,7 @@ fn main() {
         },
         None => false,
     } {
-        cpu.registers.pc = 0x100;
-        cpu.registers.a = 0x01;
-        cpu.registers.b = 0x00;
-        cpu.registers.c = 0x13;
-        cpu.registers.d = 0x00;
-        cpu.registers.e = 0xD8;
-        cpu.registers.h = 0x01;
-        cpu.registers.l = 0x4D;
-        cpu.flags.z = true;
-        cpu.flags.n = false;
-        cpu.flags.h = true;
-        cpu.flags.c = true;
-        cpu.registers.sp = 0xFFFE;
+        cpu.set_post_boot_state();
     };
 
     let rom = std::fs::read(cli.rom).expect("Unable to open ROM");

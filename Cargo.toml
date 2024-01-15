@@ -11,3 +11,9 @@ categories = ["emulators"]
 [dependencies]
 #winit = "0.29"
 clap = { version = "4.4", features = ["derive"] }
+sdl2 = "*"
+imgui = "*"
+#glow = "*"
+imgui-sdl2-support = "*"
+imgui-sdl2 = "*"
+imgui-glow-renderer = "*"

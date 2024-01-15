@@ -6,13 +6,33 @@ pub struct Cpu {
     pub registers: Registers,
     pub flags: Flags,
     pub ime: bool,
+    ime_delayed: bool,
     pub bus: Bus,
+    halted: bool,
 }
 
 impl Cpu {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn set_post_boot_state(&mut self) {
+        self.registers.pc = 0x100;
+        self.registers.a = 0x01;
+        self.registers.b = 0x00;
+        self.registers.c = 0x13;
+        self.registers.d = 0x00;
+        self.registers.e = 0xD8;
+        self.registers.h = 0x01;
+        self.registers.l = 0x4D;
+        self.flags.z = true;
+        self.flags.n = false;
+        self.flags.h = true;
+        self.flags.c = true;
+        self.registers.sp = 0xFFFE;
+
+        self.bus.timer.sysclock = 0xAB;
     }
 }
 
@@ -253,6 +273,10 @@ impl Cpu {
     }
 
     pub fn fetch(&mut self) -> u8 {
+        if self.halted {
+            self.bus.tick();
+            return 0x00;
+        }
         self.fetch_imm8()
     }
 
@@ -720,7 +744,7 @@ impl Cpu {
                 self.ime = false;
             }
             Instruction::Ei => {
-                self.ime = true; // TODO delay
+                self.ime_delayed = true; // TODO delay
             }
             Instruction::Bit(bit, register) => {
                 let value = match register {
@@ -734,21 +758,27 @@ impl Cpu {
                 self.flags.h = true;
             }
             Instruction::Set(bit, register) => match register {
-                Register::IndirectHL => self.bus.write_byte(
-                    self.get_register_pair(&RegisterPair::HL),
-                    self.bus
-                        .read_byte(self.get_register_pair(&RegisterPair::HL))
-                        | (1 << bit),
-                ),
+                Register::IndirectHL => {
+                    let value = self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL));
+                    self.bus.write_byte(
+                        self.get_register_pair(&RegisterPair::HL),
+                        value | (1 << bit),
+                    );
+                }
                 _ => self.registers[&register] |= 1 << bit,
             },
             Instruction::Res(bit, register) => match register {
-                Register::IndirectHL => self.bus.write_byte(
-                    self.get_register_pair(&RegisterPair::HL),
-                    self.bus
-                        .read_byte(self.get_register_pair(&RegisterPair::HL))
-                        & !(1 << bit),
-                ),
+                Register::IndirectHL => {
+                    let value = self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL));
+                    self.bus.write_byte(
+                        self.get_register_pair(&RegisterPair::HL),
+                        value & !(1 << bit),
+                    );
+                }
                 _ => self.registers[&register] &= !(1 << bit),
             },
             Instruction::Push(rp) => {
@@ -1168,7 +1198,40 @@ impl Cpu {
                 self.flags.n = true;
                 self.flags.h = true;
             }
+            Instruction::Halt => {
+                self.halted = true;
+            }
             _ => panic!("Unhandled instruction {instruction:?}"),
+        }
+
+        // Check for pending interrupts
+        for i in 0..=4 {
+            if (1 << i) & self.bus.interrupt_enable & self.bus.interrupt_flags != 0 {
+                // Exit HALT state
+                self.halted = false;
+
+                // If IME, also service interrupt
+                if self.ime {
+                    // Two wait states (NOPs?)
+                    self.bus.tick();
+                    self.bus.tick();
+
+                    // Call interrupt handler
+                    self.push(self.registers.pc);
+                    self.registers.pc = 0x0040 + (i * 8);
+                    self.bus.tick();
+
+                    // Disable interrupts
+                    self.ime = false;
+                    self.bus.interrupt_flags &= !(1 << i);
+                    break;
+                }
+            }
+        }
+
+        if self.ime_delayed {
+            self.ime = true;
+            self.ime_delayed = false;
         }
     }
 }
