@@ -34,8 +34,7 @@ fn main() {
     if !match cli.bootrom {
         Some(bootrom_file) => match std::fs::read(bootrom_file) {
             Ok(bootrom) => {
-                cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
-                cpu.bus.bootrom_enabled = true;
+                cpu.bus.set_boot_rom(bootrom);
                 true
             }
             Err(_) => {
@@ -49,7 +48,7 @@ fn main() {
     };
 
     let rom = std::fs::read(cli.rom).expect("Unable to open ROM");
-    cpu.bus.cartridge = Some(cartridge::from_rom(rom));
+    cpu.bus.insert_cartridge(cartridge::from_rom(rom));
 
     loop {
         // gucci:
@@ -71,7 +70,6 @@ fn main() {
                 cpu.bus.read_byte(cpu.registers.pc+3),
             );
         }
-        // TODO check for interrupts
         let opcode = cpu.fetch();
         let instruction = cpu.decode(opcode);
         cpu.execute(instruction);

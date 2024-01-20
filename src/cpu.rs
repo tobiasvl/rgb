@@ -1,14 +1,26 @@
-use crate::bus::Bus;
+use crate::bus::{Bus, DmgBus};
 use std::ops::{Index, IndexMut};
 
-#[derive(Default)]
 pub struct Cpu {
     pub registers: Registers,
     pub flags: Flags,
     pub ime: bool,
-    ime_delayed: bool,
-    pub bus: Bus,
-    halted: bool,
+    pub ime_delayed: bool,
+    pub halted: bool,
+    pub bus: Box<dyn Bus>,
+}
+
+impl Default for Cpu {
+    fn default() -> Self {
+        Self {
+            registers: Registers::default(),
+            flags: Flags::default(),
+            ime: false,
+            ime_delayed: false,
+            halted: false,
+            bus: Box::new(DmgBus::new()),
+        }
+    }
 }
 
 impl Cpu {
@@ -32,7 +44,7 @@ impl Cpu {
         self.flags.c = true;
         self.registers.sp = 0xFFFE;
 
-        self.bus.timer.sysclock = 0xAB;
+        self.bus.set_post_boot_state();
     }
 }
 
@@ -473,7 +485,7 @@ impl Cpu {
             0o373 => Instruction::Ei,
             0o376 => Instruction::Cp(Operand::Immediate8(self.fetch_imm8())),
             0o307 | 0o317 | 0o327 | 0o337 | 0o347 | 0o357 | 0o367 | 0o377 => {
-                Instruction::Rst(((opcode & 0o70) >> 3) * 16)
+                Instruction::Rst(((opcode & 0o70) >> 3) * 8)
             }
             _ => {
                 panic!(
@@ -486,6 +498,11 @@ impl Cpu {
 
     #[allow(clippy::too_many_lines)]
     pub fn execute(&mut self, instruction: Instruction) {
+        if self.ime_delayed {
+            self.ime = true;
+            self.ime_delayed = false;
+        }
+
         match instruction {
             Instruction::Nop => (),
             Instruction::Ld(target, source) => match (target, source) {
@@ -1005,15 +1022,10 @@ impl Cpu {
             }
             Instruction::Rlc(register) => {
                 let result = if let Register::IndirectHL = register {
-                    let result = (
-                        self.bus
-                            .read_byte(self.get_register_pair(&RegisterPair::HL))
-                            << 1,
-                        self.bus
-                            .read_byte(self.get_register_pair(&RegisterPair::HL))
-                            & 0x80
-                            != 0,
-                    );
+                    let byte = self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL));
+                    let result = (byte << 1, byte & 0x80 != 0);
                     self.bus.write_byte(
                         self.get_register_pair(&RegisterPair::HL),
                         result.0 | u8::from(result.1),
@@ -1028,7 +1040,7 @@ impl Cpu {
                     self.registers[&register] = result.0;
                     result
                 };
-                self.flags.z = result.0 == 0;
+                self.flags.z = result.0 | u8::from(result.1) == 0;
                 self.flags.n = false;
                 self.flags.h = false;
                 self.flags.c = result.1;
@@ -1058,7 +1070,7 @@ impl Cpu {
                     self.registers[&register] = result.0;
                     result
                 };
-                self.flags.z = result.0 == 0;
+                self.flags.z = (result.0 | if result.1 { 0x80 } else { 0 }) == 0;
                 self.flags.n = false;
                 self.flags.h = false;
                 self.flags.c = result.1;
@@ -1075,26 +1087,19 @@ impl Cpu {
             }
             Instruction::Sla(register) => {
                 let result = if let Register::IndirectHL = register {
-                    let result = (
-                        self.bus
-                            .read_byte(self.get_register_pair(&RegisterPair::HL))
-                            << 1,
-                        self.bus
-                            .read_byte(self.get_register_pair(&RegisterPair::HL))
-                            & 0x80
-                            != 0,
-                    );
-                    self.bus.write_byte(
-                        self.get_register_pair(&RegisterPair::HL),
-                        result.0 | ((result.0 >> 1) & 1),
-                    );
+                    let byte = self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL));
+                    let result = (byte << 1, byte & 0x80 != 0);
+                    self.bus
+                        .write_byte(self.get_register_pair(&RegisterPair::HL), result.0);
                     result
                 } else {
                     let result = (
                         self.registers[&register] << 1,
                         self.registers[&register] & 0x80 != 0,
                     );
-                    self.registers[&register] = result.0 | ((result.0 << 1) & 1);
+                    self.registers[&register] = result.0;
                     result
                 };
                 self.flags.z = result.0 == 0;
@@ -1104,23 +1109,16 @@ impl Cpu {
             }
             Instruction::Sra(register) => {
                 let result = if let Register::IndirectHL = register {
-                    let result = (
-                        self.bus
-                            .read_byte(self.get_register_pair(&RegisterPair::HL))
-                            >> 1,
-                        self.bus
-                            .read_byte(self.get_register_pair(&RegisterPair::HL))
-                            & 0x01
-                            != 0,
-                    );
-                    self.bus.write_byte(
-                        self.get_register_pair(&RegisterPair::HL),
-                        result.0 | ((result.0 >> 1) & 1),
-                    );
+                    let byte = self
+                        .bus
+                        .read_byte(self.get_register_pair(&RegisterPair::HL));
+                    let result = ((byte >> 1) | (byte & 0x80), byte & 0x01 != 0);
+                    self.bus
+                        .write_byte(self.get_register_pair(&RegisterPair::HL), result.0);
                     result
                 } else {
                     let mut result = (
-                        self.registers[&register] >> 1,
+                        (self.registers[&register] >> 1) | (self.registers[&register] & 0x80),
                         self.registers[&register] & 0x01 != 0,
                     );
                     result = (result.0 | ((self.registers[&register]) & 0x80), result.1);
@@ -1201,12 +1199,18 @@ impl Cpu {
             Instruction::Halt => {
                 self.halted = true;
             }
+            Instruction::Stop => {
+                if self.bus.get_interrupt_enable() & self.bus.get_interrupt_flags() != 0 {
+                    let _ = self.fetch();
+                    self.halted = true; // TODO
+                }
+            }
             _ => panic!("Unhandled instruction {instruction:?}"),
         }
 
         // Check for pending interrupts
         for i in 0..=4 {
-            if (1 << i) & self.bus.interrupt_enable & self.bus.interrupt_flags != 0 {
+            if (1 << i) & self.bus.get_interrupt_enable() & self.bus.get_interrupt_flags() != 0 {
                 // Exit HALT state
                 self.halted = false;
 
@@ -1223,15 +1227,13 @@ impl Cpu {
 
                     // Disable interrupts
                     self.ime = false;
-                    self.bus.interrupt_flags &= !(1 << i);
+                    self.bus
+                        .set_interrupt_flags(self.bus.get_interrupt_flags() & !(1 << i));
                     break;
+                } else {
+                    // HALT bug
                 }
             }
-        }
-
-        if self.ime_delayed {
-            self.ime = true;
-            self.ime_delayed = false;
         }
     }
 }

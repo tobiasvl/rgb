@@ -3,7 +3,24 @@ use crate::interrupts::Interrupt;
 use crate::ppu::Ppu;
 use crate::timer::Timer;
 
-pub struct Bus {
+pub trait Bus {
+    fn tick(&mut self);
+    fn read_byte(&mut self, address: u16) -> u8;
+    fn peek_byte(&self, address: u16) -> u8;
+    fn read_word(&mut self, address: u16) -> u16;
+    fn write_byte(&mut self, address: u16, value: u8);
+    fn write_word(&mut self, address: u16, value: u16);
+    fn set_post_boot_state(&mut self);
+    fn get_interrupt_enable(&self) -> u8;
+    fn set_interrupt_enable(&mut self, value: u8);
+    fn get_interrupt_flags(&self) -> u8;
+    fn set_interrupt_flags(&mut self, flags: u8);
+    fn insert_cartridge(&mut self, cartridge: Box<dyn Cartridge>);
+    fn remove_cartridge(&mut self);
+    fn set_boot_rom(&mut self, bootrom: Vec<u8>);
+}
+
+pub struct DmgBus {
     pub bootrom: [u8; 256],
     pub ppu: Ppu,
     pub wram: [u8; 0x2000], // TODO banks
@@ -17,7 +34,7 @@ pub struct Bus {
     pub cartridge: Option<Box<dyn Cartridge>>,
 }
 
-impl Default for Bus {
+impl Default for DmgBus {
     fn default() -> Self {
         Self {
             bootrom: [0; 256],
@@ -35,9 +52,15 @@ impl Default for Bus {
     }
 }
 
-impl Bus {
+impl DmgBus {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Bus for DmgBus {
     /// Tick one M-cycle (4 T-cycles)
-    pub(crate) fn tick(&mut self) {
+    fn tick(&mut self) {
         if let Some(irq) = self.ppu.tick() {
             match irq {
                 Interrupt::VBlank => self.interrupt_flags |= 1,
@@ -50,10 +73,14 @@ impl Bus {
         }
     }
 
-    #[must_use]
-    pub fn read_byte(&mut self, address: u16) -> u8 {
+    fn set_boot_rom(&mut self, bootrom: Vec<u8>) {
+        self.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
+        self.bootrom_enabled = true;
+    }
+
+    fn peek_byte(&self, address: u16) -> u8 {
         #[allow(clippy::match_overlapping_arm)]
-        let byte: u8 = if self.bootrom_enabled && (0x000..0x100).contains(&address) {
+        if self.bootrom_enabled && (0x000..0x100).contains(&address) {
             self.bootrom[address as usize]
         } else {
             match address {
@@ -79,20 +106,23 @@ impl Bus {
                 0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize],
                 0xFFFF => self.interrupt_enable,
             }
-        };
+        }
+    }
 
+    #[must_use]
+    fn read_byte(&mut self, address: u16) -> u8 {
+        let byte = self.peek_byte(address);
         self.tick();
-
         byte
     }
 
     #[must_use]
-    pub fn read_word(&mut self, address: u16) -> u16 {
+    fn read_word(&mut self, address: u16) -> u16 {
         let low_byte = u16::from(self.read_byte(address));
         u16::from(self.read_byte(address + 1)) << 8 | low_byte
     }
 
-    pub fn write_byte(&mut self, address: u16, value: u8) {
+    fn write_byte(&mut self, address: u16, value: u8) {
         match address {
             0x0000..=0x7FFF | 0xA000..=0xBFFF => {
                 // TODO What happens when writing here while the boot ROM is mapped?
@@ -122,8 +152,36 @@ impl Bus {
         self.tick();
     }
 
-    pub fn write_word(&mut self, address: u16, value: u16) {
+    fn write_word(&mut self, address: u16, value: u16) {
         self.write_byte(address, (value & 0xFF) as u8);
         self.write_byte(address.wrapping_add(1), (value >> 8) as u8);
+    }
+
+    fn set_post_boot_state(&mut self) {
+        self.timer.sysclock = 0xAB;
+    }
+
+    fn get_interrupt_enable(&self) -> u8 {
+        self.interrupt_enable
+    }
+
+    fn set_interrupt_enable(&mut self, flags: u8) {
+        self.interrupt_enable = flags;
+    }
+
+    fn get_interrupt_flags(&self) -> u8 {
+        self.interrupt_flags
+    }
+
+    fn set_interrupt_flags(&mut self, flags: u8) {
+        self.interrupt_flags = flags;
+    }
+
+    fn insert_cartridge(&mut self, cartridge: Box<dyn Cartridge>) {
+        self.cartridge = Some(cartridge);
+    }
+
+    fn remove_cartridge(&mut self) {
+        self.cartridge = None;
     }
 }

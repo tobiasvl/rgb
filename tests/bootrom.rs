@@ -6,12 +6,11 @@ fn test_initial_state_bootrom() {
     let mut cpu = Cpu::new();
 
     let bootrom = std::fs::read("boot.gb").expect("Test requires bootrom");
-    cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
-    cpu.bus.bootrom_enabled = true;
+    cpu.bus.set_boot_rom(bootrom);
 
     let testrom = std::fs::read("gb-test-roms/cpu_instrs/individual/06-ld r,r.gb")
         .expect("Test requires cartridge");
-    cpu.bus.cartridge = Some(cartridge::from_rom(testrom));
+    cpu.bus.insert_cartridge(cartridge::from_rom(testrom));
 
     loop {
         println!("PC: {:04X}, AF: {:04X}, BC: {:04X}, DE: {:04X}, HL: {:04X}, SP: {:04X} ({:02X}{:02X}), ({:02X} {:02X} {:02X} {:02X})",
@@ -56,8 +55,7 @@ fn test_initial_state_bootrom_no_cart() {
     let mut cpu = Cpu::new();
 
     let bootrom = std::fs::read("boot.gb").expect("Test requires bootrom");
-    cpu.bus.bootrom[0..=0xFF].clone_from_slice(&bootrom[..]);
-    cpu.bus.bootrom_enabled = true;
+    cpu.bus.set_boot_rom(bootrom);
 
     loop {
         // TODO check for interrupts

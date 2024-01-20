@@ -9,7 +9,7 @@ pub(crate) fn run_blargg_test(path: &str) -> Result<(), String> {
     let rom =
         std::fs::read(String::from("tests/gb-test-roms/") + path).expect("Unable to open ROM");
 
-    cpu.bus.cartridge = Some(cartridge::from_rom(rom));
+    cpu.bus.insert_cartridge(cartridge::from_rom(rom));
 
     let mut serial_output: String = String::new();
 

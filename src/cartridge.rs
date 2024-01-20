@@ -45,20 +45,6 @@ pub fn from_rom(rom: Vec<u8>) -> Box<dyn Cartridge> {
     }
 }
 
-pub struct JsMoo {
-    pub ram: [u8; 0x10000],
-}
-
-impl Cartridge for JsMoo {
-    fn read_byte(&self, address: u16) -> u8 {
-        self.ram[address as usize]
-    }
-
-    fn write_byte(&mut self, address: u16, value: u8) {
-        self.ram[address as usize] = value;
-    }
-}
-
 pub struct NoMbc {
     pub rom: Vec<u8>,
     pub ram: Option<Vec<u8>>,
